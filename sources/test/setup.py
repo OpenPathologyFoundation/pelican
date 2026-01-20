@@ -42,8 +42,5 @@ setup(
         'large_image.source': [
             'test = large_image_source_test:TestTileSource',
         ],
-        'girder_large_image.source': [
-            'test = large_image_source_test:TestTileSource',
-        ],
     },
 )

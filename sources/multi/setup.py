@@ -41,7 +41,6 @@ setup(
         'all': [
             'scikit-image',
         ],
-        'girder': f'girder-large-image{limit_version}',
     },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
@@ -49,9 +48,6 @@ setup(
     entry_points={
         'large_image.source': [
             'multi = large_image_source_multi:MultiFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'multi = large_image_source_multi.girder_source:MultiGirderTileSource',
         ],
     },
 )

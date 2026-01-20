@@ -1,0 +1,36 @@
+{
+  "name": "@pathology/fdp-lib",
+  "version": "1.0.0",
+  "description": "Focus Declaration Protocol - Safety mechanism for pathology case identification",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "test": "vitest",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "pathology",
+    "digital-pathology",
+    "focus-declaration",
+    "patient-safety"
+  ],
+  "license": "Apache-2.0"
+}

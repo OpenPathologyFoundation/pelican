@@ -47,7 +47,6 @@ setup(
             'pillow-heif',
             'pillow-jxl-plugin',
         ],
-        'girder': f'girder-large-image{limit_version}',
     },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
@@ -55,9 +54,6 @@ setup(
     entry_points={
         'large_image.source': [
             'pil = large_image_source_pil:PILFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'pil = large_image_source_pil.girder_source:PILGirderTileSource',
         ],
     },
 )

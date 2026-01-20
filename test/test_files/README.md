@@ -4,7 +4,7 @@ Contextual information on testing files:
 
 ## Files of the form `geotiff_*.png`
 
-These files are used to confirm that specific tiles of specific sources are rendered the way we expect.  Files with the same root are all valid with minor variations depending on some sources (such as GDAL or mapnik) perform image rounding from different versions of the underlying libraries.
+These files are used to confirm that specific tiles of specific sources are rendered the way we expect.  Files with the same root are all valid with minor variations depending on how some sources (such as GDAL) perform image rounding from different versions of the underlying libraries.
 
 ## `global_dem.tif`
 

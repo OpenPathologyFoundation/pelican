@@ -35,11 +35,17 @@ def sum_squares(imagePath, magnification=None, **kwargs):
             :]
         sumsq = np.sum(data**2, axis=(0, 1))
         tileSumSquares.append(sumsq)
-        print('x: %d  y: %d  w: %d  h: %d  mag: %g  sums: %d %d %d' % (
+        # Handle both grayscale (1 band) and color (3+ bands) images
+        sumsq_values = [sumsq] if np.isscalar(sumsq) else sumsq.tolist()
+        sums_str = ' '.join(['%d' % v for v in sumsq_values])
+        mag = tile['magnification'] if tile['magnification'] is not None else 0
+        print('x: %d  y: %d  w: %d  h: %d  mag: %g  sums: %s' % (
             tile['x'], tile['y'], tile['width'], tile['height'],
-            tile['magnification'], sumsq[0], sumsq[1], sumsq[2]))
+            mag, sums_str))
     sumsq = np.sum(tileSumSquares, axis=0)
-    print('Sum of squares: %d %d %d' % (sumsq[0], sumsq[1], sumsq[2]))
+    sumsq_values = [sumsq] if np.isscalar(sumsq) else sumsq.tolist()
+    sums_str = ' '.join(['%d' % v for v in sumsq_values])
+    print('Sum of squares: %s' % sums_str)
     return sumsq
 
 

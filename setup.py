@@ -11,21 +11,21 @@ try:
 except (ImportError, LookupError):
     limit_version = ''
 
-with open('README.rst') as readme_file:
+with open('README.md') as readme_file:
     readme = readme_file.read()
 description = 'Python modules to work with large, multiresolution images.'
 long_description = readme
 
 extraReqs = {
-    'memcached': ['pylibmc>=1.5.1 ; platform_system != "Windows"'],
-    'redis': ['redis>=4.5.5'],
+    'memcached': ['pylibmc>=1.6.3 ; platform_system != "Windows"'],
+    'redis': ['redis>=5.0'],
     'converter': [f'large-image-converter{limit_version}'],
-    'colormaps': ['matplotlib', 'tol-colors>=2.0.0'],
-    'jupyter': ['aiohttp', 'ipyvue', 'ipyleaflet'],
-    'tiledoutput': ['pyvips'],
+    'colormaps': ['matplotlib>=3.8', 'tol-colors>=2.0.0'],
+    'jupyter': ['aiohttp>=3.9', 'ipyvue>=1.11', 'ipyleaflet>=0.18'],
+    'tiledoutput': ['pyvips>=2.2.3'],
     'performance': [
-        'psutil>=4.2.0',
-        'simplejpeg',
+        'psutil>=5.9.0',
+        'simplejpeg>=1.7',
     ],
 }
 sources = {
@@ -34,7 +34,6 @@ sources = {
     'dicom': [f'large-image-source-dicom{limit_version}'],
     'dummy': [f'large-image-source-dummy{limit_version}'],
     'gdal': [f'large-image-source-gdal{limit_version}'],
-    'mapnik': [f'large-image-source-mapnik{limit_version}'],
     'multi': [f'large-image-source-multi{limit_version}'],
     'nd2': [f'large-image-source-nd2{limit_version}'],
     'ometiff': [f'large-image-source-ometiff{limit_version}'],
@@ -71,7 +70,7 @@ setup(
     name='large-image',
     description=description,
     long_description=long_description,
-    long_description_content_type='text/x-rst',
+    long_description_content_type='text/markdown',
     license='Apache-2.0',
     author='Kitware, Inc.',
     author_email='kitware@kitware.com',
@@ -86,11 +85,11 @@ setup(
     ],
     python_requires='>=3.10',
     install_requires=[
-        'cachetools',
-        'palettable',
-        'Pillow>=10.3',
-        'numpy',
-        'typing-extensions',
+        'cachetools>=5.3',
+        'palettable>=3.3',
+        'Pillow>=11.0',
+        'numpy>=1.26',
+        'typing-extensions>=4.9',
     ],
     extras_require=extraReqs,
     include_package_data=True,

@@ -1,0 +1,46 @@
+{
+  "name": "@pathology/voice",
+  "version": "1.0.0",
+  "description": "Voice Interface - Hands-free control and intent classification for digital pathology",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "svelte-package",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@pathology/telemetry": "*"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.3.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "keywords": [
+    "pathology",
+    "digital-pathology",
+    "voice-control",
+    "speech-recognition"
+  ],
+  "license": "Apache-2.0"
+}

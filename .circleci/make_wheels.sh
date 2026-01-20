@@ -13,13 +13,7 @@ mkdir ~/wheels
 # If we need binary wheels, we would need to step through the various versions
 # of python and also run auditwheel on each output
 pip wheel . --no-deps -w ~/wheels && rm -rf build
-cd "$ROOTPATH/girder"
-pip wheel . --no-deps -w ~/wheels && rm -rf build
-cd "$ROOTPATH/girder_annotation"
-pip wheel . --no-deps -w ~/wheels && rm -rf build
 cd "$ROOTPATH/utilities/converter"
-pip wheel . --no-deps -w ~/wheels && rm -rf build
-cd "$ROOTPATH/utilities/tasks"
 pip wheel . --no-deps -w ~/wheels && rm -rf build
 cd "$ROOTPATH/sources/bioformats"
 pip wheel . --no-deps -w ~/wheels && rm -rf build
@@ -30,8 +24,6 @@ pip wheel . --no-deps -w ~/wheels && rm -rf build
 cd "$ROOTPATH/sources/dummy"
 pip wheel . --no-deps -w ~/wheels && rm -rf build
 cd "$ROOTPATH/sources/gdal"
-pip wheel . --no-deps -w ~/wheels && rm -rf build
-cd "$ROOTPATH/sources/mapnik"
 pip wheel . --no-deps -w ~/wheels && rm -rf build
 cd "$ROOTPATH/sources/multi"
 pip wheel . --no-deps -w ~/wheels && rm -rf build

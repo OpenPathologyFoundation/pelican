@@ -34,20 +34,16 @@ setup(
     python_requires='>=3.10',
     install_requires=[
         f'large-image{limit_version}',
-        'python-bioformats>=1.5.2',
+        'jpy>=0.18',
+        'numpy>=1.26',
+        'requests>=2.31',
     ],
-    extras_require={
-        'girder': f'girder-large-image{limit_version}',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'bioformats = large_image_source_bioformats:BioformatsFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'bioformats = large_image_source_bioformats.girder_source:BioformatsGirderTileSource',
         ],
     },
 )

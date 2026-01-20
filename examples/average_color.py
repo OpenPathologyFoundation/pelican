@@ -39,11 +39,17 @@ def average_color(imagePath, magnification=None):
         mean = np.mean(tile['tile'], axis=(0, 1))
         tileMeans.append(mean)
         tileWeights.append(tile['width'] * tile['height'])
-        print('x: %d  y: %d  w: %d  h: %d  mag: %g  color: %g %g %g' % (
+        # Handle both grayscale (1 band) and color (3+ bands) images
+        mean_values = [mean] if np.isscalar(mean) else mean.tolist()
+        color_str = ' '.join(['%g' % v for v in mean_values])
+        mag = tile['magnification'] if tile['magnification'] is not None else 0
+        print('x: %d  y: %d  w: %d  h: %d  mag: %g  color: %s' % (
             tile['x'], tile['y'], tile['width'], tile['height'],
-            tile['magnification'], mean[0], mean[1], mean[2]))
+            mag, color_str))
     mean = np.average(tileMeans, axis=0, weights=tileWeights)
-    print('Average color: %g %g %g' % (mean[0], mean[1], mean[2]))
+    mean_values = [mean] if np.isscalar(mean) else mean.tolist()
+    color_str = ' '.join(['%g' % v for v in mean_values])
+    print('Average color: %s' % color_str)
     return mean
 
 

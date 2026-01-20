@@ -4,7 +4,7 @@ from format_examples_datastore import EXAMPLES_FOLDER, fetch_all, format_example
 
 import large_image
 
-TABLE_FILE = Path('./format_table.rst')
+TABLE_FILE = Path('./format_table.md')
 NO_MULTIFRAME_SOURCES = ['deepzoom', 'openjpeg', 'openslide']
 
 

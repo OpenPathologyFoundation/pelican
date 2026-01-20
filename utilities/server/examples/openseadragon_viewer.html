@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Large Image Server - OpenSeaDragon Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/openseadragon@4.1/build/openseadragon/openseadragon.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .toolbar {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid #333;
+        }
+        .toolbar label { font-size: 0.9rem; }
+        .toolbar input, .toolbar select {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .toolbar input { width: 300px; }
+        .toolbar button {
+            background: #0f3460;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toolbar button:hover { background: #1a4f8c; }
+        #viewer {
+            width: 100%;
+            height: calc(100vh - 60px);
+            background: #0a0a0a;
+        }
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            max-width: 350px;
+            z-index: 100;
+        }
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #64b5f6;
+        }
+        .info-panel p { margin: 5px 0; }
+        .error {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #c62828;
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <label>Server:</label>
+        <input type="text" id="server-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+        <label>Image:</label>
+        <input type="text" id="image-id" placeholder="image.svs or path/to/image.tiff">
+        <button onclick="loadImage()">Load Image</button>
+        <button onclick="loadFromList()">List Images</button>
+    </div>
+
+    <div id="viewer"></div>
+
+    <div id="info-panel" class="info-panel" style="display: none;">
+        <h3>Image Info</h3>
+        <div id="info-content"></div>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <script>
+        let viewer = null;
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => errorEl.style.display = 'none', 5000);
+        }
+
+        async function loadImage() {
+            const serverUrl = document.getElementById('server-url').value.replace(/\/$/, '');
+            const imageId = document.getElementById('image-id').value;
+
+            if (!imageId) {
+                showError('Please enter an image ID');
+                return;
+            }
+
+            try {
+                // Fetch metadata first
+                const metaResponse = await fetch(`${serverUrl}/metadata/${encodeURIComponent(imageId)}`);
+                if (!metaResponse.ok) {
+                    throw new Error(`Failed to load metadata: ${metaResponse.statusText}`);
+                }
+                const metadata = await metaResponse.json();
+
+                // Update info panel
+                document.getElementById('info-content').innerHTML = `
+                    <p><strong>${imageId}</strong></p>
+                    <p>Dimensions: ${metadata.sizeX.toLocaleString()} x ${metadata.sizeY.toLocaleString()}</p>
+                    <p>Levels: ${metadata.levels}</p>
+                    <p>Tile Size: ${metadata.tileWidth} x ${metadata.tileHeight}</p>
+                    ${metadata.magnification ? `<p>Magnification: ${metadata.magnification}x</p>` : ''}
+                    ${metadata.mm_x ? `<p>Resolution: ${(metadata.mm_x * 1000).toFixed(3)} µm/px</p>` : ''}
+                    ${metadata.frames ? `<p>Frames: ${metadata.frames.length}</p>` : ''}
+                `;
+                document.getElementById('info-panel').style.display = 'block';
+
+                // Initialize viewer
+                if (viewer) {
+                    viewer.destroy();
+                }
+
+                const dziUrl = `${serverUrl}/deepzoom/${encodeURIComponent(imageId)}.dzi`;
+
+                viewer = OpenSeadragon({
+                    id: 'viewer',
+                    prefixUrl: 'https://cdn.jsdelivr.net/npm/openseadragon@4.1/build/openseadragon/images/',
+                    tileSources: dziUrl,
+                    showNavigator: true,
+                    navigatorPosition: 'TOP_RIGHT',
+                    animationTime: 0.5,
+                    blendTime: 0.1,
+                    minZoomImageRatio: 0.8,
+                    maxZoomPixelRatio: 4,
+                    gestureSettingsMouse: {
+                        scrollToZoom: true
+                    },
+                    crossOriginPolicy: 'Anonymous'
+                });
+
+                viewer.addHandler('open-failed', function(event) {
+                    showError('Failed to load image tiles: ' + event.message);
+                });
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function loadFromList() {
+            const serverUrl = document.getElementById('server-url').value.replace(/\/$/, '');
+
+            try {
+                const response = await fetch(`${serverUrl}/images`);
+                if (!response.ok) {
+                    throw new Error(`Failed to list images: ${response.statusText}`);
+                }
+                const images = await response.json();
+
+                if (images.length === 0) {
+                    showError('No images found on server');
+                    return;
+                }
+
+                // Show first image or prompt selection
+                const selection = prompt(
+                    `Available images (${images.length}):\n\n` +
+                    images.slice(0, 20).join('\n') +
+                    (images.length > 20 ? `\n... and ${images.length - 20} more` : '') +
+                    '\n\nEnter image name to load:',
+                    images[0]
+                );
+
+                if (selection) {
+                    document.getElementById('image-id').value = selection;
+                    loadImage();
+                }
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        // Load image if URL has query params
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('image')) {
+            document.getElementById('image-id').value = urlParams.get('image');
+            if (urlParams.get('server')) {
+                document.getElementById('server-url').value = urlParams.get('server');
+            }
+            loadImage();
+        }
+    </script>
+</body>
+</html>

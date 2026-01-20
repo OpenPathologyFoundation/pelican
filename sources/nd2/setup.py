@@ -37,18 +37,12 @@ setup(
         'dask[array]',
         'nd2[legacy]>=0.2.3',
     ],
-    extras_require={
-        'girder': f'girder-large-image{limit_version}',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'nd2 = large_image_source_nd2:ND2FileTileSource',
-        ],
-        'girder_large_image.source': [
-            'nd2 = large_image_source_nd2.girder_source:ND2GirderTileSource',
         ],
     },
 )

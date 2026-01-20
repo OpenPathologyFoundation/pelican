@@ -34,22 +34,16 @@ setup(
     python_requires='>=3.10',
     install_requires=[
         f'large-image{limit_version}',
-        'numpy',
-        'packaging',
-        'pyvips',
+        'numpy>=1.26',
+        'packaging>=23.0',
+        'pyvips>=2.2.3',
     ],
-    extras_require={
-        'girder': 'girder-large-image',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'vips = large_image_source_vips:VipsFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'vips = large_image_source_vips.girder_source:VipsGirderTileSource',
         ],
     },
 )

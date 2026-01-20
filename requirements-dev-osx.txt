@@ -1,6 +1,4 @@
 # Top level dependencies
-girder>=3.1.18
-girder-jobs>=3.0.3
 -e sources/deepzoom
 -e sources/dicom
 -e sources/dummy
@@ -10,8 +8,6 @@ girder-jobs>=3.0.3
 -e sources/rasterio[all]
 -e sources/test
 -e sources/tifffile
--e girder/.
--e girder_annotation/.
 -e sources/zarr
 
 # Extras from main setup.py

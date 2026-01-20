@@ -38,18 +38,12 @@ setup(
         'packaging',
         'pyproj>=3.5.0',
     ],
-    extras_require={
-        'girder': f'girder-large-image{limit_version}',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'gdal = large_image_source_gdal:GDALFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'gdal = large_image_source_gdal.girder_source:GDALGirderTileSource',
         ],
     },
 )

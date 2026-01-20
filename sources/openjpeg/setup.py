@@ -36,18 +36,12 @@ setup(
         f'large-image{limit_version}',
         'glymur>=0.8.18',
     ],
-    extras_require={
-        'girder': f'girder-large-image{limit_version}',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'openjpeg = large_image_source_openjpeg:OpenjpegFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'openjpeg = large_image_source_openjpeg.girder_source:OpenjpegGirderTileSource',
         ],
     },
 )

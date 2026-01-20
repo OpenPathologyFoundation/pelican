@@ -35,25 +35,19 @@ setup(
     install_requires=[
         f'large-image{limit_version}',
         'openslide-python>=1.4.1',
-        'openslide-bin; platform_system=="Linux" and platform_machine=="x86_64"',
-        'openslide-bin; platform_system=="Linux" and platform_machine=="aarch64"',
-        'openslide-bin; platform_system=="Windows" and platform_machine=="AMD64"',
-        'openslide-bin; platform_system=="Darwin" and platform_machine=="arm64"',
-        'openslide-bin; platform_system=="Darwin" and platform_machine=="x86_64"',
+        'openslide-bin>=4.0; platform_system=="Linux" and platform_machine=="x86_64"',
+        'openslide-bin>=4.0; platform_system=="Linux" and platform_machine=="aarch64"',
+        'openslide-bin>=4.0; platform_system=="Windows" and platform_machine=="AMD64"',
+        'openslide-bin>=4.0; platform_system=="Darwin" and platform_machine=="arm64"',
+        'openslide-bin>=4.0; platform_system=="Darwin" and platform_machine=="x86_64"',
         'tifftools>=1.7.0',
     ],
-    extras_require={
-        'girder': f'girder-large-image{limit_version}',
-    },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
     url='https://github.com/girder/large_image',
     entry_points={
         'large_image.source': [
             'openslide = large_image_source_openslide:OpenslideFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'openslide = large_image_source_openslide.girder_source:OpenslideGirderTileSource',
         ],
     },
 )

@@ -3,7 +3,7 @@ import os
 import pooch
 
 registry = {
-    # netcdf file for testing mapnik source
+    # netcdf file for testing gdal source
     # Source: 04091217_ruc.nc
     '04091217_ruc.nc': 'sha512:3380c8de64afc46a5cfe764921e0fd5582380b1065754a6e6c4fa506625ee26edb1637aeda59c1d2a2dc245364b191563d8572488c32dcafe9e706e208fd9939',  # noqa
     # OME Tiff with non-tiled layout

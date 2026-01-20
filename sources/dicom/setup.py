@@ -18,18 +18,7 @@ entry_points = {
     'large_image.source': [
         'dicom = large_image_source_dicom:DICOMFileTileSource',
     ],
-    'girder_large_image.source': [
-        'dicom = large_image_source_dicom.girder_source:DICOMGirderTileSource',
-    ],
-    'girder.plugin': [
-        'dicomweb = large_image_source_dicom.girder_plugin:DICOMwebPlugin',
-    ],
 }
-
-girder_extras = [
-    f'girder-large-image{limit_version}',
-    'girder>=3.2.3',
-]
 
 setup(
     name='large-image-source-dicom',
@@ -51,13 +40,9 @@ setup(
     python_requires='>=3.10',
     install_requires=[
         f'large-image{limit_version}',
-        'wsidicom>=0.9.0,!=0.21.3',
-        'pydicom<3; python_version < "3.10"',
-        'pydicom; python_version >= "3.10"',
+        'wsidicom>=0.20',
+        'pydicom>=2.4',
     ],
-    extras_require={
-        'girder': girder_extras,
-    },
     include_package_data=True,
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*', 'test_dicom', 'test_dicom.*']),

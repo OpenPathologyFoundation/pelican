@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="sample_float32_8bit_range.zarr">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/test/test_files/sample_float32_8bit_range.zarr.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

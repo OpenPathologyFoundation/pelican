@@ -66,6 +66,7 @@ node_modules/
 
 .eslintcache
 test/externaldata
+test-cases/*
 
 docs/source/*
 docs/format_examples

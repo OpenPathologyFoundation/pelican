@@ -44,13 +44,6 @@ SourceAndFiles = {
         'skip': r'nokeyframe\.ome\.tiff$',
         'skipTiles': r'\.*nc$',
     },
-    'mapnik': {
-        'read': r'(\.(jpg|jpeg|jp2|ptif|nc|scn|svs|ndpi|tif.*|qptiff)|18[-0-9a-f]{34}\.dcm)$',
-        'noread': r'(huron\.image2_jpeg2k|sample_jp2k_33003|TCGA-DU-6399|\.(ome.tiff)$)',
-        'skip': r'nokeyframe\.ome\.tiff$',
-        # we should only test this with a projection
-        'skipTiles': r'',
-    },
     'multi': {
         'read': r'\.(yml|yaml)$',
         'skip': r'(multi_source\.yml|multi-source-composite\.yaml)$',

@@ -1,0 +1,46 @@
+{
+  "name": "@pathology/review-state",
+  "version": "1.0.0",
+  "description": "Review State Management - Diagnostic mode and workflow state for digital pathology",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "svelte-package",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@pathology/fdp-lib": "*"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.3.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "keywords": [
+    "pathology",
+    "digital-pathology",
+    "review-state",
+    "diagnostic-mode"
+  ],
+  "license": "Apache-2.0"
+}

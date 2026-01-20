@@ -43,7 +43,6 @@ setup(
         'imagecodecs-numcodecs!=2024.9.22',
     ],
     extras_require={
-        'girder': f'girder-large-image{limit_version}',
         'all': [
             'large-image-converter',
         ],
@@ -54,9 +53,6 @@ setup(
     entry_points={
         'large_image.source': [
             'zarr = large_image_source_zarr:ZarrFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'zarr = large_image_source_zarr.girder_source:ZarrGirderTileSource',
         ],
     },
 )

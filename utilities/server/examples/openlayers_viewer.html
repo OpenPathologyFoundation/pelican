@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Large Image Server - OpenLayers Viewer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v8.2.0/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v8.2.0/dist/ol.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .toolbar {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid #333;
+        }
+        .toolbar label { font-size: 0.9rem; }
+        .toolbar input, .toolbar select {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .toolbar input { width: 300px; }
+        .toolbar button {
+            background: #0f3460;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toolbar button:hover { background: #1a4f8c; }
+        #map {
+            width: 100%;
+            height: calc(100vh - 60px);
+            background: #0a0a0a;
+        }
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            max-width: 350px;
+            z-index: 100;
+        }
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #64b5f6;
+        }
+        .info-panel p { margin: 5px 0; }
+        .error {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #c62828;
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: none;
+            z-index: 200;
+        }
+        .ol-zoom {
+            top: auto;
+            bottom: 20px;
+            right: 20px;
+            left: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <label>Server:</label>
+        <input type="text" id="server-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+        <label>Image:</label>
+        <input type="text" id="image-id" placeholder="image.svs or path/to/image.tiff">
+        <button onclick="loadImage()">Load Image</button>
+        <button onclick="loadFromList()">List Images</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="info-panel" class="info-panel" style="display: none;">
+        <h3>Image Info</h3>
+        <div id="info-content"></div>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <script>
+        let map = null;
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => errorEl.style.display = 'none', 5000);
+        }
+
+        async function loadImage() {
+            const serverUrl = document.getElementById('server-url').value.replace(/\/$/, '');
+            const imageId = document.getElementById('image-id').value;
+
+            if (!imageId) {
+                showError('Please enter an image ID');
+                return;
+            }
+
+            try {
+                // Fetch metadata
+                const metaResponse = await fetch(`${serverUrl}/metadata/${encodeURIComponent(imageId)}`);
+                if (!metaResponse.ok) {
+                    throw new Error(`Failed to load metadata: ${metaResponse.statusText}`);
+                }
+                const metadata = await metaResponse.json();
+
+                // Update info panel
+                document.getElementById('info-content').innerHTML = `
+                    <p><strong>${imageId}</strong></p>
+                    <p>Dimensions: ${metadata.sizeX.toLocaleString()} x ${metadata.sizeY.toLocaleString()}</p>
+                    <p>Levels: ${metadata.levels}</p>
+                    <p>Tile Size: ${metadata.tileWidth} x ${metadata.tileHeight}</p>
+                    ${metadata.magnification ? `<p>Magnification: ${metadata.magnification}x</p>` : ''}
+                    ${metadata.mm_x ? `<p>Resolution: ${(metadata.mm_x * 1000).toFixed(3)} µm/px</p>` : ''}
+                `;
+                document.getElementById('info-panel').style.display = 'block';
+
+                // Calculate tile grid
+                const tileSize = metadata.tileWidth;
+                const maxZoom = metadata.levels - 1;
+
+                // Image extent (in pixel coordinates)
+                const extent = [0, -metadata.sizeY, metadata.sizeX, 0];
+
+                // Custom projection for the image
+                const projection = new ol.proj.Projection({
+                    code: 'image',
+                    units: 'pixels',
+                    extent: extent,
+                });
+
+                // Create XYZ tile source
+                const tileUrlFunction = function(tileCoord) {
+                    const z = tileCoord[0];
+                    const x = tileCoord[1];
+                    const y = tileCoord[2];
+                    return `${serverUrl}/tiles/${encodeURIComponent(imageId)}/${z}/${x}/${y}.jpeg`;
+                };
+
+                // Calculate resolutions for each zoom level
+                const resolutions = [];
+                for (let i = maxZoom; i >= 0; i--) {
+                    resolutions.push(Math.pow(2, maxZoom - i));
+                }
+
+                const tileGrid = new ol.tilegrid.TileGrid({
+                    extent: extent,
+                    resolutions: resolutions,
+                    tileSize: tileSize,
+                });
+
+                const source = new ol.source.XYZ({
+                    tileUrlFunction: tileUrlFunction,
+                    projection: projection,
+                    tileGrid: tileGrid,
+                    crossOrigin: 'anonymous',
+                });
+
+                const layer = new ol.layer.Tile({
+                    source: source,
+                });
+
+                // Create or update map
+                if (map) {
+                    map.setTarget(null);
+                }
+
+                map = new ol.Map({
+                    target: 'map',
+                    layers: [layer],
+                    view: new ol.View({
+                        projection: projection,
+                        center: ol.extent.getCenter(extent),
+                        resolution: resolutions[0],
+                        maxResolution: resolutions[0],
+                        minResolution: resolutions[resolutions.length - 1] / 4,
+                        extent: extent,
+                    }),
+                    controls: ol.control.defaults.defaults().extend([
+                        new ol.control.ScaleLine(),
+                        new ol.control.FullScreen(),
+                    ]),
+                });
+
+                // Fit to extent
+                map.getView().fit(extent, { padding: [50, 50, 50, 50] });
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function loadFromList() {
+            const serverUrl = document.getElementById('server-url').value.replace(/\/$/, '');
+
+            try {
+                const response = await fetch(`${serverUrl}/images`);
+                if (!response.ok) {
+                    throw new Error(`Failed to list images: ${response.statusText}`);
+                }
+                const images = await response.json();
+
+                if (images.length === 0) {
+                    showError('No images found on server');
+                    return;
+                }
+
+                const selection = prompt(
+                    `Available images (${images.length}):\n\n` +
+                    images.slice(0, 20).join('\n') +
+                    (images.length > 20 ? `\n... and ${images.length - 20} more` : '') +
+                    '\n\nEnter image name to load:',
+                    images[0]
+                );
+
+                if (selection) {
+                    document.getElementById('image-id').value = selection;
+                    loadImage();
+                }
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        // Load image if URL has query params
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('image')) {
+            document.getElementById('image-id').value = urlParams.get('image');
+            if (urlParams.get('server')) {
+                document.getElementById('server-url').value = urlParams.get('server');
+            }
+            loadImage();
+        }
+    </script>
+</body>
+</html>

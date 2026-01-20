@@ -41,7 +41,6 @@ setup(
         'all': [
             'pylibjpeg-openjpeg',
         ],
-        'girder': f'girder-large-image{limit_version}',
     },
     keywords='large_image, tile source',
     packages=find_packages(exclude=['test', 'test.*']),
@@ -49,9 +48,6 @@ setup(
     entry_points={
         'large_image.source': [
             'tiff = large_image_source_tiff:TiffFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'tiff = large_image_source_tiff.girder_source:TiffGirderTileSource',
         ],
     },
 )

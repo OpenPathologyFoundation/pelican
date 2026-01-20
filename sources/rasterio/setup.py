@@ -38,7 +38,6 @@ setup(
         'packaging',
     ],
     extras_require={
-        'girder': f'girder-large-image{limit_version}',
         'all': [
             'rio-cogeo',
         ],
@@ -49,9 +48,6 @@ setup(
     entry_points={
         'large_image.source': [
             'rasterio = large_image_source_rasterio:RasterioFileTileSource',
-        ],
-        'girder_large_image.source': [
-            'rasterio = large_image_source_rasterio.girder_source:RasterioGirderTileSource',
         ],
     },
 )

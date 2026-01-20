@@ -2,7 +2,7 @@ import os
 
 from setuptools import find_packages, setup
 
-with open('README.rst') as fh:
+with open('README.md') as fh:
     readme = fh.read()
 
 description = 'Converter for Large Image.'
@@ -21,7 +21,7 @@ setup(
     name='large-image-converter',
     description=description,
     long_description=long_description,
-    long_description_content_type='text/x-rst',
+    long_description_content_type='text/markdown',
     license='Apache-2.0',
     author='Kitware Inc',
     author_email='kitware@kitware.com',
@@ -39,14 +39,14 @@ setup(
     python_requires='>=3.10',
     install_requires=[
         f'large-image-source-tiff{limit_version}',
-        'numpy',
-        'psutil',
-        'pyvips',
-        'tifftools',
+        'numpy>=1.26',
+        'psutil>=5.9',
+        'pyvips>=2.2.3',
+        'tifftools>=1.7',
     ],
     extras_require={
         'jp2k': [
-            'glymur',
+            'glymur>=0.12',
         ],
         'geospatial': [
             'gdal',
@@ -55,15 +55,15 @@ setup(
             f'large-image[sources]{limit_version}',
         ],
         'stats': [
-            'packaging',
-            'scikit-image',
+            'packaging>=23.0',
+            'scikit-image>=0.22',
         ],
         'all': [
-            'glymur',
+            'glymur>=0.12',
             'gdal',
             f'large-image[sources]{limit_version}',
-            'packaging',
-            'scikit-image',
+            'packaging>=23.0',
+            'scikit-image>=0.22',
         ],
     },
     packages=find_packages(),

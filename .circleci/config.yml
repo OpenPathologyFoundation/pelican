@@ -59,21 +59,9 @@ commands:
     parameters:
       version:
         type: string
-      node:
-        type: string
     steps:
       - switchpython:
           version: << parameters.version >>
-      - run:
-          name: start mongo
-          # This had been
-          # docker run --rm -d -p 27017:27017 circleci/mongo:5.0-ram
-          # but circleci has deprecated their mongo images.  Running as ram
-          # just turned off journalling and run with the db on a memory mapped
-          # location.  --bind_ip_all is required.
-          command: |
-            # docker run --rm -d -p 127.0.0.1:27017:27017 mongo:5.0 bash -c "mkdir /dev/shm/mongo && mongod --nojournal --dbpath=/dev/shm/mongo --noauth --bind_ip_all"
-            docker run --rm -d -p 127.0.0.1:27017:27017 mongo:latest bash -c "mongod --noauth --bind_ip_all"
       - run:
           name: start dcm4chee and upload example data (for DICOMweb tests)
           command: |
@@ -101,10 +89,6 @@ commands:
             echo 'Uploading example data...'
             python ./.circleci/dcm4chee/upload_example_data.py
       - run:
-          name: start rabbitmq
-          command: |
-            docker run --rm -d -p 5672:5672 rabbitmq
-      - run:
           name: start memcached
           command: |
             docker run --rm -d -p 11211:11211 memcached -m 64
@@ -113,32 +97,6 @@ commands:
           command: |
             docker run --rm -d -p 6379:6379 redis
             echo "export REDIS_TEST_URL=127.0.01:6379" >> $BASH_ENV
-      - run:
-          name: Use nvm
-          # see https://discuss.circleci.com/t/nvm-does-not-change-node-version-on-machine/28973/14
-          command: |
-            echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
-            echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
-      - restore_cache:
-          name: Restore nvm cache
-          key: v1-nvm-cache-<< parameters.node >>
-      - run:
-          name: Switch node versions
-          command: |
-            nvm install << parameters.node >>
-            nvm alias default << parameters.node >>
-            NODE_DIR=$(dirname $(which node))
-            echo "export PATH=$NODE_DIR:\$PATH" >> $BASH_ENV
-      - save_cache:
-          name: Save nvm cache
-          key: v1-nvm-cache-<< parameters.node >>
-          paths:
-            - /opt/circleci/.nvm/.cache
-      - run:
-          name: Check node versions
-          command: |
-            node --version
-            npm --version
   coverage:
     description: "Upload coverage"
     steps:
@@ -188,9 +146,8 @@ jobs:
       - checkout
       - allservices:
           version: "3.10"
-          node: v14
       - tox:
-          toxenv: test-py310
+          toxenv: core-py310
       - coverage
       - store_artifacts:
           path: build/test/artifacts
@@ -202,9 +159,8 @@ jobs:
       - checkout
       - allservices:
           version: "3.11"
-          node: v14
       - tox:
-          toxenv: test-py311
+          toxenv: core-py311
       - coverage
       - store_artifacts:
           path: build/test/artifacts
@@ -216,9 +172,8 @@ jobs:
       - checkout
       - allservices:
           version: "3.12"
-          node: v14
       - tox:
-          toxenv: test-py312
+          toxenv: core-py312
       - coverage
       - store_artifacts:
           path: build/test/artifacts
@@ -230,10 +185,8 @@ jobs:
       - checkout
       - allservices:
           version: "3.13"
-          node: v14
       - tox:
-          toxenv: test-py313
-          # environ: TOX_VERBOSE=4 TOX_PREFER_BINARY=1
+          toxenv: core-py313
       - coverage
       - store_artifacts:
           path: build/test/artifacts
@@ -245,10 +198,8 @@ jobs:
       - checkout
       - allservices:
           version: "3.14"
-          node: v14
       - tox:
-          toxenv: test-py314
-          # environ: TOX_VERBOSE=4 TOX_PREFER_BINARY=1
+          toxenv: core-py314
       - coverage
       - store_artifacts:
           path: build/test/artifacts
@@ -263,7 +214,7 @@ jobs:
           name: Permissions for link checker
           command: find /root -type d -exec chmod 755 {} \+
       - tox:
-          toxenv: docs,lint,lintclient,notebook
+          toxenv: docs,lint,notebook
       - store_artifacts:
           path: build/docs
       - persist_to_workspace:
@@ -454,7 +405,6 @@ workflows:
             branches:
               only:
                 - master
-                - girder-5
       - docs-deploy:
           requires:
             - py310
