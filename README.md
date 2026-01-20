@@ -17,6 +17,8 @@ This project is derived from [Kitware\'s Large
 Image](https://github.com/girder/large_image) library, used under the
 Apache License 2.0.
 
+This project includes the commit history from upstream. GitHub’s contributor list includes upstream authors whose work is incorporated here.
+
 This fork has been heavily refactored to focus specifically on whole
 slide image (WSI) viewing for digital pathology workflows. Key
 modifications include:
