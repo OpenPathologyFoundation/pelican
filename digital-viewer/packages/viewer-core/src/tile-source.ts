@@ -20,6 +20,22 @@ export async function fetchSlideMetadata(
 
   const data = await response.json();
 
+  // Determine MPP and calibration state from metadata
+  // mm_x from server is in millimeters, convert to microns (μm)
+  const mpp = data.mm_x ? data.mm_x * 1000 : undefined;
+
+  // Determine calibration state based on available data
+  // If mm_x is present from the scanner, it's factory calibrated
+  // SVS files store MPP in TIFF tags from the scanner
+  let calibrationState: 'site_calibrated' | 'factory' | 'unvalidated' | 'unknown' = 'unknown';
+  let mppSource: 'scanner' | 'manual' | undefined;
+
+  if (mpp !== undefined) {
+    // MPP present - from scanner metadata
+    calibrationState = 'factory';
+    mppSource = 'scanner';
+  }
+
   return {
     slideId,
     width: data.sizeX,
@@ -28,7 +44,9 @@ export async function fetchSlideMetadata(
     tileHeight: data.tileHeight,
     levels: data.levels,
     magnification: data.magnification,
-    mpp: data.mm_x ? data.mm_x * 1000 : undefined,
+    mpp,
+    mppSource,
+    calibrationState,
     format: data.format,
     vendor: data.vendor,
     properties: data,

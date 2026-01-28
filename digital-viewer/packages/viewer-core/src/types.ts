@@ -18,6 +18,16 @@ export interface TileSourceConfig {
   height?: number;
 }
 
+/** Calibration state for measurements */
+export type CalibrationState =
+  | 'site_calibrated'
+  | 'factory'
+  | 'unvalidated'
+  | 'unknown';
+
+/** MPP source */
+export type MppSource = 'scanner' | 'manual';
+
 /** Slide metadata */
 export interface SlideMetadata {
   slideId: string;
@@ -28,8 +38,18 @@ export interface SlideMetadata {
   levels: number;
   magnification?: number;
   mpp?: number; // Microns per pixel
+  mppSource?: MppSource; // Source of MPP value (SRS SYS-MSR-004)
+  calibrationState?: CalibrationState; // Calibration state (SRS SYS-MSR-005)
+  scanId?: string; // Specific scan identifier
+  supersededBy?: string; // If this scan has been superseded
   format?: string;
   vendor?: string;
+  // Label/barcode fields (SRS UN-SAF-006)
+  barcode?: string; // Slide barcode text
+  labelImageUrl?: string; // URL to label/macro image
+  specimenPart?: string; // Specimen part identifier
+  blockId?: string; // Block identifier
+  stain?: string; // Stain type
   properties?: Record<string, unknown>;
 }
 

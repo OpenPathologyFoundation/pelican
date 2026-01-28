@@ -394,5 +394,21 @@ export class FocusDeclarationProtocol {
   }
 }
 
+// WCAG Contrast Validation (SRS SYS-FDP-005)
+export {
+  hexToRgb,
+  getLuminance,
+  getContrastRatio,
+  meetsWcagAA,
+  meetsWcagAAA,
+  getContrastRatioHex,
+  suggestAccessibleColor,
+  validateFdpColors,
+  WCAG_AA_MIN_CONTRAST,
+  WCAG_AAA_MIN_CONTRAST,
+  WCAG_AA_LARGE_TEXT_MIN_CONTRAST,
+  type RGB,
+} from './contrast';
+
 // Default export
 export default FocusDeclarationProtocol;

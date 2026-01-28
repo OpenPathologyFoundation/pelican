@@ -99,6 +99,28 @@ class ServerSettings(BaseSettings):
         description='Enable Swagger/OpenAPI documentation',
     )
 
+    # JWT Authentication settings (SRS SYS-IMS-036)
+    jwt_enabled: bool = Field(
+        default=False,
+        description='Enable JWT authentication for tile endpoints',
+    )
+    jwt_secret: str | None = Field(
+        default=None,
+        description='Secret key for HS* algorithms or public key for RS* algorithms',
+    )
+    jwt_algorithm: str = Field(
+        default='HS256',
+        description='JWT signing algorithm (HS256, HS384, HS512, RS256, RS384, RS512)',
+    )
+    jwt_audience: str | None = Field(
+        default=None,
+        description='Expected JWT audience claim (optional)',
+    )
+    jwt_issuer: str | None = Field(
+        default=None,
+        description='Expected JWT issuer claim (optional)',
+    )
+
 
 # Global settings instance
 _settings: ServerSettings | None = None

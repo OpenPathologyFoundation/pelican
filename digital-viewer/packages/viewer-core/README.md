@@ -263,16 +263,154 @@ const tileSource = TileSourceFactory.createDeepZoom(
 
 ## Keyboard Shortcuts
 
+Press `?` to show the keyboard shortcuts help modal at any time.
+
+### Navigation
+
 | Key | Action |
 |-----|--------|
 | `+` / `=` | Zoom in |
 | `-` | Zoom out |
-| `0` | Reset zoom |
-| `Arrow keys` | Pan |
-| `r` | Rotate 90° clockwise |
-| `R` (shift+r) | Rotate 90° counter-clockwise |
-| `f` | Toggle fullscreen |
-| `h` | Home (reset view) |
+| `Cmd/Ctrl + 0` | Fit to screen |
+| `Home` | Go to home view |
+| `Cmd/Ctrl + Z` | Undo navigation |
+| `Cmd/Ctrl + Shift + Z` | Redo navigation |
+
+### Bookmarks (ROI)
+
+| Key | Action |
+|-----|--------|
+| `Cmd/Ctrl + B` | Create bookmark at current position |
+| `B` | Toggle bookmark panel |
+| `N` | Go to next bookmark |
+| `P` | Go to previous bookmark |
+
+### Tools
+
+| Key | Action |
+|-----|--------|
+| `T` | Toggle tools panel |
+| `M` | Activate line measurement |
+| `A` | Activate area measurement |
+
+### Slides
+
+| Key | Action |
+|-----|--------|
+| `[` | Previous slide |
+| `]` | Next slide |
+
+### Help
+
+| Key | Action |
+|-----|--------|
+| `?` | Show keyboard shortcuts help |
+
+## Bookmarks / Regions of Interest (ROI)
+
+Bookmarks allow you to save and quickly navigate to specific viewport positions on a slide.
+
+### Creating Bookmarks
+
+1. **Via Keyboard**: Press `Cmd/Ctrl + B` to create a bookmark at your current position
+2. **Via UI**: Open the Tools panel (press `T`), go to the "ROI" tab, and click "+ Save Current Position"
+
+### Navigating to Bookmarks
+
+1. **Via Bookmark Panel**: Press `B` to toggle the bookmark panel, then click on any bookmark to navigate to it
+2. **Via ROI Tab**: In the Tools panel ROI tab, click on any bookmark in the list
+
+### Bookmark Features
+
+- **Edit Label**: Click the pencil icon on a bookmark to rename it
+- **Delete**: Click the X icon to remove a bookmark
+- **Export/Import**: Use the toolbar buttons in the bookmark panel to export bookmarks to JSON or import from a file
+- **Sorting**: Sort bookmarks by creation time, name, or zoom level
+
+### Stores
+
+```typescript
+import {
+  bookmarks,
+  createBookmark,
+  goToBookmark,
+  deleteBookmark,
+  exportBookmarks,
+  importBookmarks,
+} from '@pathology/viewer-core';
+
+// Create a bookmark
+const bookmark = createBookmark('Interesting region', 'Found suspicious cells here');
+
+// Navigate to a bookmark
+goToBookmark(bookmark.id);
+
+// Export bookmarks to JSON
+const json = exportBookmarks();
+
+// Import bookmarks from JSON
+const count = importBookmarks(jsonString);
+```
+
+## Navigation History (Undo/Redo)
+
+The viewer automatically records your navigation history, allowing you to undo and redo viewport changes.
+
+### Usage
+
+- **Undo**: Press `Cmd/Ctrl + Z` to go back to your previous viewport position
+- **Redo**: Press `Cmd/Ctrl + Shift + Z` to go forward in history
+
+### Stores
+
+```typescript
+import {
+  canUndo,
+  canRedo,
+  undo,
+  redo,
+  navigationHistory,
+} from '@pathology/viewer-core';
+
+// Check if undo is available
+if ($canUndo) {
+  undo();
+}
+
+// Check if redo is available
+if ($canRedo) {
+  redo();
+}
+```
+
+## Slide Label / Barcode View
+
+View slide identification information including barcode, specimen details, and scan metadata.
+
+### Usage
+
+1. Open the Tools panel (press `T`)
+2. In the "Zoom" tab, click the "Label" button
+3. A modal will show slide information including:
+   - Barcode
+   - Slide ID and Scan ID
+   - Specimen part, block, and stain
+   - Scan date and scanner info
+   - Image dimensions and resolution
+
+### Component
+
+```svelte
+<script>
+  import { SlideLabel } from '@pathology/viewer-core';
+</script>
+
+<!-- Compact button that opens modal -->
+<SlideLabel mode="compact" />
+
+<!-- Full inline display -->
+<SlideLabel mode="full" showBarcode={true} showLabelImage={true} />
+```
 
 ## Integration with Tile Server
 

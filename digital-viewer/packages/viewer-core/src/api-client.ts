@@ -17,12 +17,19 @@ export interface CaseSummary {
   slideCount: number;
 }
 
+/** Case source - where the case was loaded from (SRS SYS-DXM-001) */
+export type CaseSource = 'worklist' | 'search' | 'direct' | 'external';
+
 /** Full case details from /cases/{id} endpoint */
 export interface CaseDetails extends CaseSummary {
   patientDob?: string;
   patientSex?: string;
   clinicalHistory?: string;
   slides: SlideInfo[];
+  /** Source of case (for DX mode determination) - defaults to 'search' */
+  source?: CaseSource;
+  /** Whether this case requires clinical/diagnostic mode (SRS SYS-DXM-001) */
+  requiresDiagnosticMode?: boolean;
 }
 
 /** Slide information */
@@ -72,29 +79,163 @@ export interface SlideMetadata {
 export interface ApiClientConfig {
   baseUrl: string;
   timeout?: number;
+  /** JWT token for authentication (SRS SYS-INT-002) */
+  accessToken?: string;
+  /** Token refresh callback - called when token is expired */
+  onTokenExpired?: () => Promise<string | null>;
+  /** Callback when auth fails completely */
+  onAuthFailed?: () => void;
+}
+
+/** JWT token payload (decoded) */
+export interface JwtPayload {
+  sub: string; // User ID
+  exp: number; // Expiration timestamp
+  iat: number; // Issued at timestamp
+  caseId?: string; // Case-scoped token
+  scope?: string[]; // Permissions
 }
 
 /**
  * Tile Server API Client
+ *
+ * Includes JWT authentication support per SRS SYS-INT-002
  */
 export class TileServerClient {
   private baseUrl: string;
   private timeout: number;
+  private accessToken: string | null;
+  private onTokenExpired?: () => Promise<string | null>;
+  private onAuthFailed?: () => void;
+  private isRefreshing = false;
+  private refreshPromise: Promise<string | null> | null = null;
 
   constructor(config: ApiClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeout = config.timeout ?? 30000;
+    this.accessToken = config.accessToken || null;
+    this.onTokenExpired = config.onTokenExpired;
+    this.onAuthFailed = config.onAuthFailed;
+  }
+
+  /**
+   * Set the access token (SRS SYS-INT-002)
+   */
+  setAccessToken(token: string | null): void {
+    this.accessToken = token;
+  }
+
+  /**
+   * Get the current access token
+   */
+  getAccessToken(): string | null {
+    return this.accessToken;
+  }
+
+  /**
+   * Check if current token is expired
+   */
+  isTokenExpired(): boolean {
+    if (!this.accessToken) return true;
+
+    try {
+      const payload = this.decodeToken(this.accessToken);
+      if (!payload || !payload.exp) return true;
+      // Consider token expired 30 seconds before actual expiry
+      return Date.now() >= (payload.exp * 1000) - 30000;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Decode JWT payload (without verification)
+   */
+  decodeToken(token: string): JwtPayload | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(atob(parts[1]));
+      return payload as JwtPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Refresh the access token
+   */
+  private async refreshToken(): Promise<string | null> {
+    if (!this.onTokenExpired) return null;
+
+    // Deduplicate concurrent refresh requests
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = this.onTokenExpired();
+
+    try {
+      const newToken = await this.refreshPromise;
+      if (newToken) {
+        this.accessToken = newToken;
+      }
+      return newToken;
+    } finally {
+      this.isRefreshing = false;
+      this.refreshPromise = null;
+    }
   }
 
   private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
+    // Check and refresh token if needed
+    if (this.isTokenExpired() && this.onTokenExpired) {
+      const newToken = await this.refreshToken();
+      if (!newToken) {
+        this.onAuthFailed?.();
+        throw new Error('Authentication required');
+      }
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      // Build headers with Authorization (SRS SYS-INT-002)
+      const headers = new Headers(options?.headers);
+      if (this.accessToken) {
+        headers.set('Authorization', `Bearer ${this.accessToken}`);
+      }
+      headers.set('Content-Type', 'application/json');
+
       const response = await fetch(`${this.baseUrl}${path}`, {
         ...options,
+        headers,
         signal: controller.signal,
       });
+
+      // Handle 401 Unauthorized (SRS SYS-ERR-003)
+      if (response.status === 401) {
+        // Try to refresh token once
+        if (this.onTokenExpired) {
+          const newToken = await this.refreshToken();
+          if (newToken) {
+            // Retry the request with new token
+            headers.set('Authorization', `Bearer ${newToken}`);
+            const retryResponse = await fetch(`${this.baseUrl}${path}`, {
+              ...options,
+              headers,
+              signal: controller.signal,
+            });
+            if (retryResponse.ok) {
+              return retryResponse.json();
+            }
+          }
+        }
+        this.onAuthFailed?.();
+        throw new Error('Authentication failed');
+      }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: response.statusText }));

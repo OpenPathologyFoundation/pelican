@@ -17,6 +17,55 @@ export type AnnotationType =
   | 'arrow'
   | 'ruler';
 
+/**
+ * Annotation visibility levels (SRS SYS-ANN-004)
+ * 6-level hierarchy from most restrictive to least
+ */
+export type AnnotationVisibility =
+  | 'private' // Only author can see (default per SYS-ANN-005)
+  | 'case_team' // Users assigned to this case
+  | 'department' // Department members
+  | 'conference' // Tumor board, case conference
+  | 'external' // External consultants
+  | 'published'; // Public/report inclusion
+
+/** Visibility level display configuration */
+export const VISIBILITY_DISPLAY: Record<
+  AnnotationVisibility,
+  { label: string; icon: string; description: string }
+> = {
+  private: {
+    label: 'Private',
+    icon: '🔒',
+    description: 'Only you can see this annotation',
+  },
+  case_team: {
+    label: 'Case Team',
+    icon: '👥',
+    description: 'Visible to users assigned to this case',
+  },
+  department: {
+    label: 'Department',
+    icon: '🏢',
+    description: 'Visible to department members',
+  },
+  conference: {
+    label: 'Conference',
+    icon: '📋',
+    description: 'Visible for tumor board or case conference',
+  },
+  external: {
+    label: 'External',
+    icon: '🌐',
+    description: 'Visible to external consultants',
+  },
+  published: {
+    label: 'Published',
+    icon: '📄',
+    description: 'Included in reports and publicly visible',
+  },
+};
+
 /** Annotation style */
 export interface AnnotationStyle {
   strokeColor: string;
@@ -106,6 +155,18 @@ export interface AnnotationProperties extends GeoJsonProperties {
   modifiedBy?: string;
   locked?: boolean;
   visible?: boolean;
+
+  // SRS SYS-ANN-003: Immutable binding to specific scan
+  slideId?: string;
+  scanId?: string; // Immutable - never changes after creation
+
+  // SRS SYS-ANN-004, SYS-ANN-005: Visibility model (defaults to 'private')
+  visibility: AnnotationVisibility;
+
+  // SRS SYS-ANN-008: Soft-delete (tombstone)
+  isDeleted: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 /** Annotation measurements */

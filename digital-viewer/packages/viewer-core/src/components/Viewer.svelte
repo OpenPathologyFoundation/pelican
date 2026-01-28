@@ -9,6 +9,8 @@
   import { onMount, onDestroy } from 'svelte';
   import OpenSeadragon from 'openseadragon';
   import { TileSourceFactory } from '../tile-source';
+  import { createTilePrefetcher, type TilePrefetchConfig } from '../tile-prefetcher';
+  import { createTileFailureTracker, type TileFailureConfig } from '../tile-failure-tracker';
   import {
     viewerConfig,
     slideMetadata,
@@ -17,6 +19,9 @@
     viewerReady,
     isLoading,
     viewerError,
+    osdViewer,
+    viewerSize,
+    tileFailureState,
   } from '../stores';
   import type {
     ViewerConfig,
@@ -59,6 +64,9 @@
   let containerEl: HTMLDivElement | undefined = $state();
   let viewer: OpenSeadragon.Viewer | null = $state(null);
   let tileSourceFactory: TileSourceFactory | null = $state(null);
+  let resizeObserver: ResizeObserver | null = null;
+  let tilePrefetcher: ReturnType<typeof createTilePrefetcher> | null = null;
+  let tileFailureTracker: ReturnType<typeof createTileFailureTracker> | null = null;
 
   /** Update viewport state from OSD */
   function updateViewportState(): void {
@@ -198,6 +206,62 @@
       });
     });
 
+    // Initialize tile failure tracker (SYS-ERR-001)
+    tileFailureTracker = createTileFailureTracker({
+      failureThreshold: 0.5, // 50% failure rate triggers error
+      timeWindowMs: 30000,   // 30 second window
+      minRequestsForEvaluation: 10,
+      onThresholdExceeded: (state) => {
+        tileFailureState.set({
+          thresholdExceeded: true,
+          failureRate: state.failureRate,
+          lastError: state.lastError,
+        });
+      },
+      onThresholdRecovered: () => {
+        tileFailureState.set({
+          thresholdExceeded: false,
+          failureRate: 0,
+        });
+      },
+    });
+
+    // Wire tile events to failure tracker
+    viewer.addHandler('tile-loaded', (event: OpenSeadragon.TileEvent) => {
+      if (event.tile && tileFailureTracker) {
+        tileFailureTracker.recordRequest(
+          event.tile.level,
+          event.tile.x,
+          event.tile.y,
+          true
+        );
+      }
+    });
+
+    viewer.addHandler('tile-load-failed', (event: OpenSeadragon.TileEvent) => {
+      if (event.tile && tileFailureTracker) {
+        tileFailureTracker.recordRequest(
+          event.tile.level,
+          event.tile.x,
+          event.tile.y,
+          false,
+          'Tile load failed'
+        );
+      }
+    });
+
+    // Initialize tile prefetcher (SYS-VWR-005)
+    tilePrefetcher = createTilePrefetcher(viewer, {
+      enabled: true,
+      prefetchRadius: 2,
+      prefetchAdjacentLevels: true,
+      settleTime: 200,
+      maxConcurrentRequests: 6,
+    });
+
+    // Publish viewer instance to store
+    osdViewer.set(viewer);
+
     onready?.();
   }
 
@@ -229,6 +293,9 @@
     viewer.close();
     slideMetadata.set(null);
     currentSlideId.set(null);
+    tileFailureTracker?.reset();
+    tilePrefetcher?.clearCache();
+    tileFailureState.set({ thresholdExceeded: false, failureRate: 0 });
   }
 
   /** Navigate to a specific point */
@@ -276,10 +343,35 @@
   /** Lifecycle */
   onMount(() => {
     initViewer();
+
+    // Track container size for overlays
+    if (containerEl) {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          viewerSize.set({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          });
+        }
+      });
+      resizeObserver.observe(containerEl);
+
+      // Initial size
+      viewerSize.set({
+        width: containerEl.clientWidth,
+        height: containerEl.clientHeight,
+      });
+    }
   });
 
   onDestroy(() => {
+    resizeObserver?.disconnect();
+    tilePrefetcher?.destroy();
+    tilePrefetcher = null;
+    tileFailureTracker?.reset();
+    tileFailureTracker = null;
     if (viewer) {
+      osdViewer.set(null);
       viewer.destroy();
       viewer = null;
     }
