@@ -15,7 +15,7 @@
 
   import { onMount, onDestroy } from 'svelte';
   import { getApiClient, configureApiClient } from '../api-client';
-  import type { CaseDetails, SlideInfo, SlideWithContext } from '../api-client';
+  import type { CaseDetails, SlideInfo, SlideWithContext, CaseSource } from '../api-client';
   import {
     caseContext,
     currentSlideId,
@@ -23,6 +23,34 @@
     privacyMode,
     resetViewerState,
   } from '../stores';
+  import {
+    trackCaseOpened,
+    trackCaseClosed,
+    trackSlideViewed,
+    trackDxModeChanged,
+  } from '../stores/telemetry-integration';
+  import {
+    configureSession,
+    connectSession,
+    registerCase,
+    deregisterCase,
+    destroySession,
+    onSessionWarning,
+    createWebSocketSessionHandler,
+    type SessionWarning,
+  } from '../stores/session-integration';
+  import {
+    startReviewSession,
+    endReviewSession,
+    openCase as openReviewCase,
+    closeCase as closeReviewCase,
+    openSlide as openReviewSlide,
+    closeSlide as closeReviewSlide,
+    addReviewEventListener,
+    removeReviewEventListener,
+    type ReviewEvent,
+    type UserDeclaredReviewState,
+  } from '@pathology/review-state';
   import type { CaseContext } from '../types';
 
   import CaseBanner from './CaseBanner.svelte';
@@ -31,6 +59,19 @@
   import CaseSwitchDialog from './CaseSwitchDialog.svelte';
   import SlideGallery from './SlideGallery.svelte';
   import Viewer from './Viewer.svelte';
+  import MeasurementOverlay from './MeasurementOverlay.svelte';
+  import ViewerToolsPanel from './ViewerToolsPanel.svelte';
+  import ShortcutsHelp from './ShortcutsHelp.svelte';
+  import BookmarkPanel from './BookmarkPanel.svelte';
+  import { handleKeydown, showShortcutsHelp } from '../stores/shortcuts';
+  import type { ShortcutAction } from '../types/shortcuts';
+  import { createBookmark, toggleBookmarkPanel, bookmarkPanelVisible, goToNextBookmark, goToPreviousBookmark } from '../stores/bookmark';
+  import { undo, redo, pushNavigation } from '../stores/navigation-history';
+  import { startMeasurement, cancelMeasurement } from '../stores/measurement';
+  import { osdViewer, viewportState } from '../stores';
+
+  /** Tools panel visibility store */
+  let toolsPanelOpen = $state(false);
 
   /** Props */
   interface Props {
@@ -40,24 +81,42 @@
     initialCaseId?: string | null;
     /** Initial slide ID to load */
     initialSlideId?: string | null;
-    /** Enable diagnostic mode */
-    enableDiagnosticMode?: boolean;
+    /** Enable diagnostic mode (defaults to auto based on case source per SRS SYS-DXM-001) */
+    enableDiagnosticMode?: boolean | 'auto';
     /** Enable privacy mode */
     enablePrivacyMode?: boolean;
+    /** Initial case source (worklist, search, direct, external) */
+    initialCaseSource?: CaseSource;
+    /** Session service WebSocket URL (optional, enables SYS-SES-* features) */
+    sessionServiceUrl?: string | null;
+    /** User ID for session service */
+    userId?: string | null;
     /** Callback when case changes */
     oncasechange?: (data: { caseId: string; caseDetails: CaseDetails }) => void;
     /** Callback when slide changes */
     onslidechange?: (data: { slideId: string; slide: SlideInfo }) => void;
+    /** Callback when DX mode changes */
+    ondxmodechange?: (data: { enabled: boolean; reason: string }) => void;
+    /** Callback when session warning occurs (SYS-SES-004) */
+    onsessionwarning?: (data: { warning: SessionWarning }) => void;
+    /** Callback when review state is declared (SYS-RVW-001) */
+    onreviewstate?: (data: { slideId: string; caseId: string; state: UserDeclaredReviewState }) => void;
   }
 
   let {
     tileServerUrl = 'http://localhost:8000',
     initialCaseId = null,
     initialSlideId = null,
-    enableDiagnosticMode = false,
+    enableDiagnosticMode = 'auto',
     enablePrivacyMode = false,
+    initialCaseSource = 'search',
+    sessionServiceUrl = null,
+    userId = null,
     oncasechange,
     onslidechange,
+    ondxmodechange,
+    onsessionwarning,
+    onreviewstate,
   }: Props = $props();
 
   /** State */
@@ -66,28 +125,64 @@
   let selectedSlideId = $state<string | null>(null);
   let leftPanelCollapsed = $state(false);
   let showSettings = $state(false);
+  let currentCaseSource = $state<CaseSource>(initialCaseSource);
 
   /** Case switch dialog state */
   let showSwitchDialog = $state(false);
   let pendingCaseId = $state<string | null>(null);
   let pendingCasePatient = $state<string>('');
+  let pendingCaseSource = $state<CaseSource>('search');
+
+  /** Session state */
+  let sessionInitialized = $state(false);
+  let sessionWarningUnsubscribe: (() => void) | null = null;
+
+  /** Review state (SYS-RVW-*) */
+  let reviewSessionStarted = $state(false);
+  let reviewEventUnsubscribe: (() => void) | null = null;
 
   /** Configure API client - use getter to capture prop value */
   let client = $derived(configureApiClient({ baseUrl: tileServerUrl }));
 
+  /**
+   * Determine if diagnostic mode should be enabled (SRS SYS-DXM-001)
+   * Clinical worklist cases default to DX mode enabled
+   */
+  function shouldEnableDiagnosticMode(source: CaseSource, caseDetails?: CaseDetails | null): boolean {
+    // If explicitly set (not 'auto'), use that value
+    if (enableDiagnosticMode !== 'auto') {
+      return enableDiagnosticMode;
+    }
+
+    // Case explicitly requires DX mode
+    if (caseDetails?.requiresDiagnosticMode) {
+      return true;
+    }
+
+    // Auto mode: enable for clinical worklist cases (SRS SYS-DXM-001)
+    // Worklist = clinical cases that require DX safety features
+    return source === 'worklist';
+  }
+
   /** Update diagnostic/privacy mode stores */
   $effect(() => {
-    diagnosticMode.set(enableDiagnosticMode);
+    const shouldEnable = shouldEnableDiagnosticMode(currentCaseSource, currentCase);
+    diagnosticMode.set(shouldEnable);
   });
 
   $effect(() => {
     privacyMode.set(enablePrivacyMode);
   });
 
-  /** Load case by ID */
-  async function loadCase(caseId: string): Promise<void> {
+  /** Load case by ID with source tracking (SRS SYS-DXM-001) */
+  async function loadCase(caseId: string, source: CaseSource = 'search'): Promise<void> {
     try {
       const caseDetails = await client.getCase(caseId);
+
+      // Track case source for DX mode determination
+      currentCaseSource = source;
+      caseDetails.source = source;
+
       currentCase = caseDetails;
       slides = caseDetails.slides;
 
@@ -98,6 +193,34 @@
         patientDob: caseDetails.patientDob,
       };
       caseContext.set(context);
+
+      // Determine and notify DX mode state (SRS SYS-DXM-001)
+      const dxEnabled = shouldEnableDiagnosticMode(source, caseDetails);
+      const reason = source === 'worklist'
+        ? 'Case loaded from clinical worklist'
+        : caseDetails.requiresDiagnosticMode
+          ? 'Case requires diagnostic mode'
+          : enableDiagnosticMode === true
+            ? 'Diagnostic mode explicitly enabled'
+            : 'Diagnostic mode not required';
+      ondxmodechange?.({ enabled: dxEnabled, reason });
+
+      // Track telemetry events (Tier 2 workflow)
+      trackCaseOpened(caseId, source);
+      trackDxModeChanged(caseId, dxEnabled, reason);
+
+      // Register with session service (SYS-SES-001)
+      if (sessionInitialized) {
+        registerCase(caseId, caseDetails.patientName, userId ?? undefined);
+      }
+
+      // Open case in review session (SYS-RVW-001)
+      if (reviewSessionStarted) {
+        const slideIds = caseDetails.slides.map((s) => s.slideId);
+        const priority = caseDetails.priority === 'stat' ? 'stat' :
+                        caseDetails.priority === 'urgent' ? 'urgent' : 'routine';
+        openReviewCase(caseId, priority, slideIds);
+      }
 
       oncasechange?.({ caseId, caseDetails });
 
@@ -111,32 +234,50 @@
   }
 
   /** Handle case selection from search */
-  function handleCaseSelect(data: { caseId: string }): void {
+  function handleCaseSelect(data: { caseId: string; source?: CaseSource }): void {
     const newCaseId = data.caseId;
+    const source = data.source ?? 'search';
 
     // If we have a current case, show confirmation dialog
     if (currentCase && currentCase.caseId !== newCaseId) {
       pendingCaseId = newCaseId;
+      pendingCaseSource = source;
       // Fetch the patient name for the pending case
       client.getCase(newCaseId).then((details) => {
         pendingCasePatient = details.patientName;
         showSwitchDialog = true;
       });
     } else {
-      loadCase(newCaseId);
+      loadCase(newCaseId, source);
     }
   }
 
-  /** Confirm case switch */
+  /** Confirm case switch (SYS-SES-005) */
   function confirmCaseSwitch(): void {
     if (pendingCaseId) {
+      // Track closing the current case (Tier 2 workflow telemetry)
+      if (currentCase) {
+        trackCaseClosed(currentCase.caseId);
+
+        // Close case in review session (SYS-RVW-001)
+        if (reviewSessionStarted) {
+          closeReviewCase(currentCase.caseId);
+        }
+      }
+
+      // Deregister from session before switching
+      if (sessionInitialized) {
+        deregisterCase();
+      }
+
       resetViewerState();
       selectedSlideId = null;
-      loadCase(pendingCaseId);
+      loadCase(pendingCaseId, pendingCaseSource);
     }
     showSwitchDialog = false;
     pendingCaseId = null;
     pendingCasePatient = '';
+    pendingCaseSource = 'search';
   }
 
   /** Cancel case switch */
@@ -144,12 +285,24 @@
     showSwitchDialog = false;
     pendingCaseId = null;
     pendingCasePatient = '';
+    pendingCaseSource = 'search';
   }
 
   /** Select a slide */
   function selectSlide(slide: SlideInfo): void {
     selectedSlideId = slide.slideId;
     currentSlideId.set(slide.slideId);
+
+    // Track slide view (Tier 2 workflow telemetry)
+    if (currentCase) {
+      trackSlideViewed(currentCase.caseId, slide.slideId);
+    }
+
+    // Open slide in review session (SYS-RVW-001)
+    if (reviewSessionStarted) {
+      openReviewSlide(slide.slideId);
+    }
+
     onslidechange?.({ slideId: slide.slideId, slide });
   }
 
@@ -168,18 +321,103 @@
     showSettings = !showSettings;
   }
 
-  /** Lifecycle */
-  onMount(() => {
-    // Load initial case if provided
-    if (initialCaseId) {
-      loadCase(initialCaseId).then(() => {
-        if (initialSlideId) {
-          const slide = slides.find((s) => s.slideId === initialSlideId);
-          if (slide) {
-            selectSlide(slide);
+  /** Initialize review session (SYS-RVW-001) */
+  function initializeReviewSession(): void {
+    if (reviewSessionStarted) return;
+
+    // Start the review session with the user ID
+    const reviewUserId = userId ?? 'anonymous';
+    const isDxMode = shouldEnableDiagnosticMode(currentCaseSource, currentCase);
+    startReviewSession(reviewUserId, isDxMode);
+    reviewSessionStarted = true;
+
+    // Subscribe to review events for Tier 2 persistence and callbacks
+    reviewEventUnsubscribe = (() => {
+      const listener = (event: ReviewEvent) => {
+        // When a review state is declared, notify parent component
+        if (event.type === 'status-changed' && event.caseId && event.slideId) {
+          const state = event.data as { status?: UserDeclaredReviewState };
+          if (state?.status) {
+            onreviewstate?.({
+              caseId: event.caseId,
+              slideId: event.slideId,
+              state: state.status,
+            });
           }
         }
+      };
+      addReviewEventListener(listener);
+      return () => removeReviewEventListener(listener);
+    })();
+  }
+
+  /** Initialize session service if configured (SYS-SES-001, SYS-SES-002) */
+  async function initializeSession(): Promise<void> {
+    if (!sessionServiceUrl || !userId) return;
+
+    try {
+      // Configure session handler
+      const handler = createWebSocketSessionHandler({
+        url: sessionServiceUrl,
+        userId,
+        heartbeatInterval: 30000, // 30s per SYS-SES-002
+        onWarning: (warning) => {
+          onsessionwarning?.({ warning });
+        },
       });
+      configureSession(handler);
+
+      // Connect to session service
+      await connectSession();
+      sessionInitialized = true;
+
+      // Subscribe to warnings (SYS-SES-004)
+      sessionWarningUnsubscribe = onSessionWarning((warning) => {
+        onsessionwarning?.({ warning });
+      });
+    } catch (error) {
+      console.warn('[PathologyViewer] Failed to initialize session service:', error);
+    }
+  }
+
+  /** Lifecycle */
+  onMount(() => {
+    // Initialize review session (SYS-RVW-001) - this enables the Review tab
+    initializeReviewSession();
+
+    // Initialize session service if configured
+    initializeSession().then(() => {
+      // Load initial case if provided (using initial source for DX mode determination)
+      if (initialCaseId) {
+        loadCase(initialCaseId, initialCaseSource).then(() => {
+          if (initialSlideId) {
+            const slide = slides.find((s) => s.slideId === initialSlideId);
+            if (slide) {
+              selectSlide(slide);
+            }
+          }
+        });
+      }
+    });
+  });
+
+  onDestroy(() => {
+    // Track case closed when component is destroyed (Tier 2 workflow telemetry)
+    if (currentCase) {
+      trackCaseClosed(currentCase.caseId);
+    }
+
+    // End review session (SYS-RVW-005 - purge session-only state)
+    if (reviewSessionStarted) {
+      endReviewSession();
+      reviewEventUnsubscribe?.();
+    }
+
+    // Deregister and cleanup session (SYS-SES-003)
+    if (sessionInitialized) {
+      deregisterCase();
+      destroySession();
+      sessionWarningUnsubscribe?.();
     }
   });
 
@@ -190,7 +428,96 @@
     if (!slide) return null;
     return `${currentCase.caseId}/${slide.filename}`;
   });
+
+  /** Handle global keyboard shortcuts (SRS UN-WFL-002) */
+  function handleGlobalShortcuts(event: KeyboardEvent): void {
+    const action = handleKeydown(event);
+    if (!action) return;
+
+    const viewer = $osdViewer;
+
+    switch (action) {
+      case 'navigation.undo':
+        undo();
+        break;
+      case 'navigation.redo':
+        redo();
+        break;
+      case 'navigation.home':
+        viewer?.viewport?.goHome();
+        break;
+      case 'zoom.in':
+        if (viewer) {
+          const currentZoom = viewer.viewport.getZoom();
+          viewer.viewport.zoomTo(currentZoom * 1.5);
+        }
+        break;
+      case 'zoom.out':
+        if (viewer) {
+          const currentZoom = viewer.viewport.getZoom();
+          viewer.viewport.zoomTo(currentZoom / 1.5);
+        }
+        break;
+      case 'zoom.fit':
+        viewer?.viewport?.goHome();
+        break;
+      case 'bookmark.create':
+        createBookmark(`Bookmark`);
+        break;
+      case 'bookmark.panel.toggle':
+        toggleBookmarkPanel();
+        break;
+      case 'bookmark.next':
+        goToNextBookmark();
+        break;
+      case 'bookmark.previous':
+        goToPreviousBookmark();
+        break;
+      case 'tools.measure.line':
+        startMeasurement('line');
+        break;
+      case 'tools.measure.area':
+        startMeasurement('rectangle');
+        break;
+      case 'tools.panel.toggle':
+        toolsPanelOpen = !toolsPanelOpen;
+        break;
+      case 'slide.next':
+        if (currentCase && selectedSlideId) {
+          const currentIndex = slides.findIndex(s => s.slideId === selectedSlideId);
+          if (currentIndex < slides.length - 1) {
+            selectSlide(slides[currentIndex + 1]);
+          }
+        }
+        break;
+      case 'slide.previous':
+        if (currentCase && selectedSlideId) {
+          const currentIndex = slides.findIndex(s => s.slideId === selectedSlideId);
+          if (currentIndex > 0) {
+            selectSlide(slides[currentIndex - 1]);
+          }
+        }
+        break;
+      case 'help.shortcuts':
+        showShortcutsHelp();
+        break;
+    }
+  }
+
+  /** Record viewport changes to navigation history */
+  $effect(() => {
+    const viewport = $viewportState;
+    if (viewport && selectedSlideId) {
+      pushNavigation(viewport);
+    }
+  });
 </script>
+
+<!-- Global keyboard shortcuts (SRS UN-WFL-002) -->
+<svelte:window onkeydown={handleGlobalShortcuts} />
+
+<!-- Shortcuts Help Modal -->
+<ShortcutsHelp />
 
 <div class="pathology-viewer">
   <!-- FDP Banner (shows on window focus) -->
@@ -260,10 +587,46 @@
     <!-- Center: Viewer -->
     <main class="pathology-viewer__main">
       {#if currentSlidePath}
-        <Viewer
-          slideId={currentSlidePath}
-          config={{ tileServerUrl }}
-        />
+        <!-- Viewer with measurement overlay -->
+        <div class="pathology-viewer__viewer-wrapper">
+          <Viewer
+            slideId={currentSlidePath}
+            config={{ tileServerUrl }}
+          />
+          <MeasurementOverlay />
+
+          <!-- Bookmark Panel (collapsible on left side) -->
+          {#if $bookmarkPanelVisible}
+            <BookmarkPanel position="left" />
+          {/if}
+
+          <!-- Tools Panel (collapsible on right side) -->
+          <ViewerToolsPanel
+            position="right"
+            open={toolsPanelOpen}
+            onopenchange={(open) => toolsPanelOpen = open}
+            onreviewstate={(state) => {
+              // Bubble up review state changes with case/slide context
+              if (currentCase && selectedSlideId) {
+                onreviewstate?.({
+                  caseId: currentCase.caseId,
+                  slideId: selectedSlideId,
+                  state,
+                });
+              }
+            }}
+          />
+
+          <!-- Help Button -->
+          <button
+            class="help-button"
+            onclick={() => showShortcutsHelp()}
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+          >
+            ?
+          </button>
+        </div>
       {:else}
         <div class="pathology-viewer__no-slide">
           {#if currentCase}
@@ -414,6 +777,14 @@
     background: #000;
   }
 
+  .pathology-viewer__viewer-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
   .pathology-viewer__empty,
   .pathology-viewer__no-slide {
     display: flex;
@@ -437,5 +808,38 @@
   .pathology-viewer__no-slide p {
     margin: 0;
     font-size: 1rem;
+  }
+
+  /* Help Button */
+  .help-button {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(31, 41, 55, 0.9);
+    border: 1px solid #4b5563;
+    border-radius: 50%;
+    color: #9ca3af;
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 100;
+  }
+
+  .help-button:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: #3b82f6;
+    color: #60a5fa;
+    transform: scale(1.1);
+  }
+
+  .help-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
   }
 </style>

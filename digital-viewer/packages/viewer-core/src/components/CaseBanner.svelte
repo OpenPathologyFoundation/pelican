@@ -14,7 +14,7 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { caseContext, diagnosticMode } from '../stores';
+  import { caseContext, currentSlideId, diagnosticMode } from '../stores';
   import type { CaseContext } from '../types';
 
   /** Props */
@@ -154,6 +154,10 @@
         <span class="case-banner__separator"></span>
         <span class="case-banner__dob">DOB: {displayDob}</span>
       {/if}
+      {#if $currentSlideId}
+        <span class="case-banner__separator"></span>
+        <span class="case-banner__slide">{$currentSlideId}</span>
+      {/if}
     </div>
     {#if $diagnosticMode}
       <div class="case-banner__dx-badge">DX MODE</div>
@@ -168,15 +172,15 @@
     left: 0;
     right: 0;
     z-index: 10000;
-    min-height: 64px;
+    min-height: 36px;
     background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 20px;
-    padding: 16px 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    gap: 12px;
+    padding: 6px 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     transform: translateY(-100%);
     opacity: 0;
     transition: transform 300ms ease-out, opacity 300ms ease-out;
@@ -189,44 +193,50 @@
 
   .case-banner.diagnostic-mode {
     background: linear-gradient(135deg, #744210 0%, #975a16 100%);
-    border-bottom: 3px solid #f6e05e;
+    border-bottom: 2px solid #f6e05e;
   }
 
   .case-banner__content {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
   }
 
   .case-banner__case-id {
-    font-size: 1.5rem;
+    font-size: 0.95rem;
     font-weight: 700;
     letter-spacing: 0.5px;
   }
 
   .case-banner__separator {
-    width: 2px;
-    height: 28px;
+    width: 1px;
+    height: 16px;
     background: rgba(255, 255, 255, 0.4);
   }
 
   .case-banner__patient {
-    font-size: 1.25rem;
+    font-size: 0.9rem;
     font-weight: 500;
   }
 
   .case-banner__dob {
-    font-size: 1rem;
+    font-size: 0.8rem;
     opacity: 0.9;
+  }
+
+  .case-banner__slide {
+    font-size: 0.8rem;
+    opacity: 0.85;
+    font-family: monospace;
   }
 
   .case-banner__dx-badge {
     background: #f6e05e;
     color: #744210;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     font-weight: 700;
-    padding: 4px 12px;
-    border-radius: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
     letter-spacing: 1px;
   }
 </style>

@@ -26,6 +26,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
+from .auth import CurrentUser, JWTPayload, jwt_bearer
 from .config import ServerSettings, configure_settings, get_settings
 from .models import HealthResponse
 from .routes import api_router
@@ -39,6 +40,9 @@ __all__ = [
     'configure_settings',
     'get_source_manager',
     'configure_source_manager',
+    'jwt_bearer',
+    'JWTPayload',
+    'CurrentUser',
 ]
 
 # Version from setuptools_scm

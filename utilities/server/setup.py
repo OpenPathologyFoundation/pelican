@@ -62,6 +62,9 @@ setup(
         'memcached': [
             'pylibmc>=1.6.3 ; platform_system != "Windows"',
         ],
+        'jwt': [
+            'PyJWT>=2.8',
+        ],
         'test': [
             'pytest>=7.0',
             'pytest-asyncio>=0.23',

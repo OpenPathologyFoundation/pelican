@@ -67,7 +67,9 @@ node_modules/
 .eslintcache
 test/externaldata
 test-cases/*
-
+.DS_Store
+.idea/*
+.idea/modules.xml
 docs/source/*
 docs/format_examples
 docs/format_table.rst
@@ -80,3 +82,6 @@ docs/_build
 NOTES.md
 
 monkeytype.sqlite3
+
+# Build/test artifacts directory
+/artifacts/

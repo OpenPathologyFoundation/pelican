@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@pathology/fdp-lib": "*",
+    "@pathology/review-state": "*",
     "openseadragon": "^5.0.0"
   },
   "devDependencies": {

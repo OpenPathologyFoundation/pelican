@@ -147,11 +147,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 32px;
-    padding: 6px 16px;
+    min-height: 24px;
+    padding: 2px 10px;
     background: linear-gradient(135deg, rgba(26, 54, 93, 0.95) 0%, rgba(44, 82, 130, 0.95) 100%);
     color: #fff;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     transition: transform 200ms ease-out, opacity 200ms ease-out;
   }
 
@@ -173,7 +173,7 @@
   .case-indicator__left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 
   .case-indicator__case-id {
@@ -197,29 +197,29 @@
   .case-indicator__right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 
   .case-indicator__dx-badge {
     background: #f6e05e;
     color: #744210;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 3px;
+    padding: 1px 6px;
+    border-radius: 2px;
     letter-spacing: 0.5px;
   }
 
   .case-indicator__warning {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     background: #ed8936;
     color: #fff;
     border: none;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.65rem;
     font-weight: 500;
     cursor: pointer;
     transition: background 150ms;
@@ -238,20 +238,21 @@
   }
 
   .case-indicator__warning-icon {
-    font-size: 0.9rem;
+    font-size: 0.7rem;
   }
 
   .case-indicator__btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     background: transparent;
     border: none;
     color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 3px;
+    font-size: 0.7rem;
     transition: background 150ms, color 150ms;
   }
 

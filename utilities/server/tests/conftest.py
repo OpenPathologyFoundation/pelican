@@ -1,16 +1,23 @@
 """Pytest configuration and fixtures."""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 import sys
+
+# Mock large_image at import time (before test collection imports large_image_server)
+# This is needed because large_image_server imports large_image.exceptions at module level
+_mock_large_image = MagicMock()
+_mock_large_image.exceptions = MagicMock()
+_mock_large_image.exceptions.TileSourceError = Exception
+_mock_large_image.exceptions.TileSourceXYZRangeError = Exception
+sys.modules['large_image'] = _mock_large_image
+sys.modules['large_image.exceptions'] = _mock_large_image.exceptions
 
 
 @pytest.fixture(autouse=True)
 def mock_large_image():
-    """Mock large_image module for all tests."""
-    mock = MagicMock()
-    with patch.dict(sys.modules, {'large_image': mock}):
-        yield mock
+    """Provide the mock large_image module to tests."""
+    yield _mock_large_image
 
 
 @pytest.fixture

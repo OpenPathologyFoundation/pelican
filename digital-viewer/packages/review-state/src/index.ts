@@ -71,6 +71,12 @@ export type {
   ReviewStatus,
   SlideReviewState,
   WorkflowDeclaration,
+  UserDeclaredReviewState,
+  SessionOnlyState,
+  ReviewStateDeclaration,
 } from './types';
 
-export { DEFAULT_DIAGNOSTIC_SETTINGS } from './types';
+export {
+  DEFAULT_DIAGNOSTIC_SETTINGS,
+  USER_DECLARED_STATES,
+} from './types';

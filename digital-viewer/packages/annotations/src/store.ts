@@ -4,19 +4,29 @@
  * Reactive state management for annotations
  */
 
-import { writable, derived, type Readable, type Writable } from 'svelte/store';
+import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import type {
   Annotation,
   AnnotationConfig,
   AnnotationLayer,
   AnnotationStyle,
   AnnotationType,
+  AnnotationVisibility,
   Classification,
   DrawingState,
   SelectionState,
   DEFAULT_ANNOTATION_CONFIG,
   PATHOLOGY_CLASSIFICATIONS,
 } from './types';
+
+/** Current user ID for ownership checks (SYS-ANN-007) */
+export const currentUserId: Writable<string | null> = writable(null);
+
+/** Current user's visible slide/scan context */
+export const currentSlideContext: Writable<{
+  slideId: string;
+  scanId: string;
+} | null> = writable(null);
 
 /** Annotation configuration store */
 export const annotationConfig: Writable<AnnotationConfig> = writable({
@@ -82,15 +92,31 @@ export const activeLayer: Readable<AnnotationLayer | null> = derived(
   }
 );
 
-/** Derived: All annotations from all visible layers */
+/** Derived: All annotations from all visible layers (excluding deleted) */
 export const allVisibleAnnotations: Readable<Annotation[]> = derived(
   annotationLayers,
   ($layers) => {
     const annotations: Annotation[] = [];
     for (const layer of $layers) {
       if (layer.visible) {
-        annotations.push(...layer.annotations);
+        // SYS-ANN-008: Filter out soft-deleted annotations
+        const activeAnnotations = layer.annotations.filter(
+          (a) => !a.properties.isDeleted
+        );
+        annotations.push(...activeAnnotations);
       }
+    }
+    return annotations;
+  }
+);
+
+/** Derived: All annotations including deleted (for audit/recovery) */
+export const allAnnotationsWithDeleted: Readable<Annotation[]> = derived(
+  annotationLayers,
+  ($layers) => {
+    const annotations: Annotation[] = [];
+    for (const layer of $layers) {
+      annotations.push(...layer.annotations);
     }
     return annotations;
   }
@@ -190,19 +216,114 @@ export function updateAnnotation(
   );
 }
 
-/** Actions: Delete annotation */
-export function deleteAnnotation(annotationId: string): void {
+/**
+ * Check if current user can delete an annotation (SYS-ANN-007)
+ * Only the annotation owner can delete their own annotations
+ */
+export function canDeleteAnnotation(annotation: Annotation): boolean {
+  const userId = get(currentUserId);
+  if (!userId) return false;
+  return annotation.properties.createdBy === userId;
+}
+
+/**
+ * Actions: Soft-delete annotation (SYS-ANN-008)
+ * Implements tombstone pattern - annotation is marked as deleted, not removed
+ * Returns false if user doesn't have permission
+ */
+export function deleteAnnotation(annotationId: string): boolean {
+  const userId = get(currentUserId);
+  let canDelete = false;
+
+  annotationLayers.update((layers) => {
+    // Find the annotation to check ownership
+    for (const layer of layers) {
+      const annotation = layer.annotations.find((a) => a.properties.id === annotationId);
+      if (annotation) {
+        // SYS-ANN-007: Owner-only deletion
+        if (annotation.properties.createdBy === userId || !annotation.properties.createdBy) {
+          canDelete = true;
+        }
+        break;
+      }
+    }
+
+    if (!canDelete) {
+      return layers; // No change if not authorized
+    }
+
+    // SYS-ANN-008: Soft-delete (tombstone) - mark as deleted, don't remove
+    return layers.map((layer) => ({
+      ...layer,
+      annotations: layer.annotations.map((a) =>
+        a.properties.id === annotationId
+          ? {
+              ...a,
+              properties: {
+                ...a.properties,
+                isDeleted: true,
+                deletedAt: new Date().toISOString(),
+                deletedBy: userId || undefined,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : a
+      ),
+      updatedAt: new Date().toISOString(),
+    }));
+  });
+
+  if (canDelete) {
+    // Clear from selection
+    selectionState.update((state) => {
+      const newSelected = new Set(state.selectedIds);
+      newSelected.delete(annotationId);
+      return { ...state, selectedIds: newSelected };
+    });
+  }
+
+  return canDelete;
+}
+
+/**
+ * Actions: Restore soft-deleted annotation
+ */
+export function restoreAnnotation(annotationId: string): void {
   annotationLayers.update((layers) =>
     layers.map((layer) => ({
       ...layer,
-      annotations: layer.annotations.filter(
-        (a) => a.properties.id !== annotationId
+      annotations: layer.annotations.map((a) =>
+        a.properties.id === annotationId
+          ? {
+              ...a,
+              properties: {
+                ...a.properties,
+                isDeleted: false,
+                deletedAt: undefined,
+                deletedBy: undefined,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : a
       ),
       updatedAt: new Date().toISOString(),
     }))
   );
+}
 
-  // Clear from selection
+/**
+ * Actions: Hard delete annotation (admin only, for compliance purge)
+ * This actually removes the record - use only for GDPR/compliance
+ */
+export function hardDeleteAnnotation(annotationId: string): void {
+  annotationLayers.update((layers) =>
+    layers.map((layer) => ({
+      ...layer,
+      annotations: layer.annotations.filter((a) => a.properties.id !== annotationId),
+      updatedAt: new Date().toISOString(),
+    }))
+  );
+
   selectionState.update((state) => {
     const newSelected = new Set(state.selectedIds);
     newSelected.delete(annotationId);
@@ -218,6 +339,56 @@ export function deleteSelectedAnnotations(): void {
     }
     return { selectedIds: new Set(), hoveredId: null };
   });
+}
+
+/**
+ * Actions: Change annotation visibility (SYS-ANN-004)
+ * Only the annotation owner can change visibility
+ */
+export function changeAnnotationVisibility(
+  annotationId: string,
+  visibility: AnnotationVisibility
+): boolean {
+  const userId = get(currentUserId);
+  let canChange = false;
+
+  annotationLayers.update((layers) => {
+    // Find the annotation to check ownership
+    for (const layer of layers) {
+      const annotation = layer.annotations.find((a) => a.properties.id === annotationId);
+      if (annotation) {
+        // Only owner can change visibility
+        if (annotation.properties.createdBy === userId || !annotation.properties.createdBy) {
+          canChange = true;
+        }
+        break;
+      }
+    }
+
+    if (!canChange) {
+      return layers;
+    }
+
+    return layers.map((layer) => ({
+      ...layer,
+      annotations: layer.annotations.map((a) =>
+        a.properties.id === annotationId
+          ? {
+              ...a,
+              properties: {
+                ...a.properties,
+                visibility,
+                updatedAt: new Date().toISOString(),
+                modifiedBy: userId || undefined,
+              },
+            }
+          : a
+      ),
+      updatedAt: new Date().toISOString(),
+    }));
+  });
+
+  return canChange;
 }
 
 /** Actions: Select annotation */

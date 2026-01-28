@@ -64,6 +64,12 @@ export const isLoading: Writable<boolean> = writable(false);
 /** Viewer error state */
 export const viewerError: Writable<string | null> = writable(null);
 
+/** OpenSeadragon viewer instance (for overlay coordination) */
+export const osdViewer: Writable<any | null> = writable(null);
+
+/** Viewer container size */
+export const viewerSize: Writable<{ width: number; height: number }> = writable({ width: 800, height: 600 });
+
 /** Diagnostic mode (FDP) */
 export const diagnosticMode: Writable<boolean> = writable(false);
 
@@ -84,6 +90,23 @@ export const overlayLayers: Writable<OverlayLayer[]> = writable([]);
 
 /** Measurement unit (for scale bar) */
 export const measurementUnit: Writable<'um' | 'mm' | 'px'> = writable('um');
+
+/** Text annotation mode */
+export const textAnnotationMode: Writable<boolean> = writable(false);
+
+/** Text annotations */
+export interface TextAnnotation {
+  id: string;
+  text: string;
+  position: { x: number; y: number }; // Image coordinates
+  color: string;
+  createdAt: string;
+}
+
+export const textAnnotations: Writable<TextAnnotation[]> = writable([]);
+
+/** Pending text annotation position (waiting for text input) */
+export const pendingTextPosition: Writable<{ x: number; y: number } | null> = writable(null);
 
 /** Derived: Is slide loaded */
 export const isSlideLoaded: Readable<boolean> = derived(
@@ -142,6 +165,16 @@ export const visibleLayers: Readable<OverlayLayer[]> = derived(
   ($overlayLayers) => $overlayLayers.filter((l) => l.visible)
 );
 
+/** Tile failure state (for error overlay) */
+export const tileFailureState: Writable<{
+  thresholdExceeded: boolean;
+  failureRate: number;
+  lastError?: string;
+}> = writable({
+  thresholdExceeded: false,
+  failureRate: 0,
+});
+
 /** Reset all viewer state */
 export function resetViewerState(): void {
   slideMetadata.set(null);
@@ -159,4 +192,5 @@ export function resetViewerState(): void {
   selectedAnnotationId.set(null);
   activeDrawingTool.set(null);
   overlayLayers.set([]);
+  tileFailureState.set({ thresholdExceeded: false, failureRate: 0 });
 }
