@@ -88,7 +88,8 @@ async def get_tile(
             encoding=encoding,
         )
 
-        tile_data = source.getTile(x, y, z, frame=frame)
+        # applyStyle=False returns raw pixel values without ICC color management
+        tile_data = source.getTile(x, y, z, frame=frame, applyStyle=False)
 
         return Response(
             content=tile_data,

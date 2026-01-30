@@ -79,8 +79,8 @@
     onopenchange,
   }: Props = $props();
 
-  /** State */
-  let isOpen = $state(initiallyOpen);
+  /** State - use function to capture initial value without reactive tracking */
+  let isOpen = $state((() => initiallyOpen)());
   let activeTab = $state<'measure' | 'annotate' | 'zoom' | 'review' | 'bookmarks'>('zoom');
   let textAnnotationInput = $state('');
   let textAnnotationColor = $state('#ffff00');
