@@ -146,9 +146,20 @@ class SourceManager:
                 'jpegQuality': settings.jpeg_quality,
                 'jpegSubsampling': settings.jpeg_subsampling,
             }
+
+            # Handle style with ICC color management disabled by default.
+            # ICC profile application transforms colors in ways that don't match
+            # what viewers like QuPath display, so we disable it unless the
+            # caller explicitly enables it.
             if style:
+                # If caller provided a style, merge ICC disable unless they set it
+                if isinstance(style, dict) and 'icc' not in style:
+                    style = {**style, 'icc': False}
                 open_kwargs['style'] = style
                 open_kwargs['noCache'] = True
+            else:
+                # No style provided - just disable ICC
+                open_kwargs['style'] = {'icc': False}
 
             open_kwargs.update(kwargs)
 

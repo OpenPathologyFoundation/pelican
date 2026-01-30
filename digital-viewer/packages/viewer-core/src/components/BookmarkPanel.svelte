@@ -279,7 +279,14 @@
 <!-- Import Dialog -->
 {#if showImportDialog}
   <div class="import-dialog-backdrop" onclick={() => showImportDialog = false} role="presentation">
-    <div class="import-dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <div
+      class="import-dialog"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && (showImportDialog = false)}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
       <h4 class="import-dialog__title">Import Bookmarks</h4>
       <textarea
         class="import-dialog__input"

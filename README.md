@@ -1,9 +1,13 @@
-# Large Image
+<div align="center">
+  <img src="assets/card.jpg" alt="Pelican Logo" width="600">
+</div>
+
 
 [![License](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/girder/large_image/master/LICENSE)
 
 [![image](https://img.shields.io/pypi/v/large-image.svg?logo=python&logoColor=white)](https://pypi.org/project/large-image/)
 
+Pelican
 *Python modules to work with large, multiresolution images.*
 
 Large Image is a Python library for working with large multi-resolution

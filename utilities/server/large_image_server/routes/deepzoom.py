@@ -169,7 +169,8 @@ async def get_dzi_tile(
         elif li_level >= metadata['levels']:
             li_level = metadata['levels'] - 1
 
-        tile_data = source.getTile(col, row, li_level, frame=frame)
+        # applyStyle=False returns raw pixel values without ICC color management
+        tile_data = source.getTile(col, row, li_level, frame=frame, applyStyle=False)
 
         return Response(
             content=tile_data,

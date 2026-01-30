@@ -509,8 +509,8 @@ def _get_viewer_html() -> str:
             document.querySelectorAll('.slide-item').forEach(el => el.classList.remove('selected'));
             if (element) element.classList.add('selected');
 
-            // Build image path: caseId/filename
-            const imagePath = currentCase.caseId + '/' + slide.slideId + '.svs';
+            // Build image path: caseId/filename (supports any format: .svs, .dcm, .ndpi, etc.)
+            const imagePath = currentCase.caseId + '/' + (slide.filename || slide.slideId + '.svs');
 
             await loadImage(imagePath, slide.slideId);
         }

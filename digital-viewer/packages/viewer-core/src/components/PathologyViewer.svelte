@@ -125,7 +125,7 @@
   let selectedSlideId = $state<string | null>(null);
   let leftPanelCollapsed = $state(false);
   let showSettings = $state(false);
-  let currentCaseSource = $state<CaseSource>(initialCaseSource);
+  let currentCaseSource = $state<CaseSource>((() => initialCaseSource)());
 
   /** Case switch dialog state */
   let showSwitchDialog = $state(false);

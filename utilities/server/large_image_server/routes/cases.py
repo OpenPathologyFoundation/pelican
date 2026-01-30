@@ -369,7 +369,11 @@ async def get_worklist(
             'priority': case.get('priority'),
             'slideCount': len(case.get('slides', [])),
             'slides': [
-                {'slideId': s.get('slideId'), 'stain': s.get('stain')}
+                {
+                    'slideId': s.get('slideId'),
+                    'stain': s.get('stain'),
+                    'filename': s.get('filename'),
+                }
                 for s in case.get('slides', [])
             ],
         })
@@ -382,3 +386,94 @@ async def get_worklist(
     ))
 
     return worklist
+
+
+# Extensions that benefit from pre-warming (slow to index on first load)
+SLOW_EXTENSIONS = {'.dcm', '.dicom'}
+
+
+@router.post(
+    '/warm',
+    summary='Pre-warm tile sources',
+    description='Pre-load tile sources to avoid first-access delays. '
+    'DICOM files particularly benefit from pre-warming.',
+)
+async def warm_sources(
+    case_id: str | None = None,
+    all_sources: bool = False,
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> dict[str, Any]:
+    """Pre-warm tile sources by loading them into cache.
+
+    DICOM WSI files have significant first-load overhead due to frame indexing.
+    Pre-warming loads them in advance so viewing is instant.
+
+    Args:
+        case_id: Optional case ID to warm. If None, warms all cases.
+        all_sources: If True, warm all slides. If False (default), only warm
+                    slow-loading formats (DICOM).
+
+    Returns:
+        Summary of warmed sources.
+    """
+    import time
+
+    data = _load_cases()
+
+    results = {'warmed': [], 'failed': [], 'skipped': []}
+
+    for case in data.get('cases', []):
+        if case_id and case.get('caseId') != case_id:
+            continue
+
+        for slide in case.get('slides', []):
+            filename = slide.get('filename', '')
+            ext = '.' + filename.split('.')[-1].lower() if '.' in filename else ''
+
+            # Check if we should warm this file
+            if not all_sources and ext not in SLOW_EXTENSIONS:
+                results['skipped'].append({
+                    'slideId': slide.get('slideId'),
+                    'reason': f'extension {ext} not in warm list',
+                })
+                continue
+
+            image_path = f"{case.get('caseId')}/{filename}"
+
+            try:
+                start = time.time()
+                source_manager.get_source(image_path)
+                elapsed = time.time() - start
+
+                results['warmed'].append({
+                    'slideId': slide.get('slideId'),
+                    'path': image_path,
+                    'time_seconds': round(elapsed, 2),
+                })
+            except Exception as e:
+                results['failed'].append({
+                    'slideId': slide.get('slideId'),
+                    'path': image_path,
+                    'error': str(e),
+                })
+
+    return {
+        'summary': {
+            'warmed': len(results['warmed']),
+            'failed': len(results['failed']),
+            'skipped': len(results['skipped']),
+        },
+        'details': results,
+    }
+
+
+@router.get(
+    '/warm/status',
+    summary='Get source cache status',
+    description='Check which sources are currently cached.',
+)
+async def warm_status(
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> dict[str, Any]:
+    """Get the current source cache status."""
+    return source_manager.cache_info()

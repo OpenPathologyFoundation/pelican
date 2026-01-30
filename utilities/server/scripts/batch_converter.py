@@ -105,14 +105,16 @@ def convert_dicom_to_tiff(
     """
     Convert DICOM WSI to pyramidal TIFF with correct color preservation.
 
-    This function handles a color calibration issue where pyvips/openslide adds
-    an ICC profile when reading DICOM files. By stripping the ICC profile and
-    setting the interpretation to RGB, we preserve the original pixel colors.
+    IMPORTANT: This function uses large_image to read the DICOM instead of
+    pyvips/openslide. This is because openslide applies ICC color profiles
+    automatically, which transforms colors incorrectly for our use case.
+    large_image (via tifffile) reads the raw pixel values without ICC
+    transformation.
 
     The output TIFF is compatible with QuPath and other WSI viewers:
     - Properly tagged pyramidal structure (NewSubfileType=0 on base image)
-    - RGB JPEG compression (no YCbCr color space conversion)
-    - No ICC profile embedded (prevents color management transformations)
+    - Standard YCbCr JPEG compression (NOT rgbjpeg which corrupts colors!)
+    - No ICC profile embedded
 
     Args:
         source_path: Path to the source DICOM file.
@@ -120,27 +122,50 @@ def convert_dicom_to_tiff(
         quality: JPEG quality (1-100).
         tile_size: Tile size in pixels.
     """
+    import large_image
     import pyvips
 
-    # Load DICOM - pyvips uses openslide which adds an ICC profile
-    img = pyvips.Image.new_from_file(source_path, access='sequential')
+    # Use large_image to read the DICOM - this preserves original colors
+    # without applying ICC profiles (unlike pyvips/openslide)
+    source = large_image.open(source_path)
+    meta = source.getMetadata()
 
-    # Extract RGB bands (remove alpha if present)
-    if img.bands == 4:
-        img = img.extract_band(0, n=3)
+    width = meta['sizeX']
+    height = meta['sizeY']
 
-    # Strip ICC profile by recreating from raw pixel memory
-    # This prevents color management transformations during save
-    mem = img.write_to_memory()
-    img_clean = pyvips.Image.new_from_memory(
-        mem, img.width, img.height, img.bands, img.format
+    # Get the full image as numpy array
+    # Note: This loads the entire image into memory. For very large images
+    # (>100k pixels), this may require significant RAM.
+    region_data, _ = source.getRegion(format='numpy')[:2]
+
+    # Ensure we have RGB (not RGBA)
+    if region_data.shape[2] == 4:
+        region_data = region_data[:, :, :3]
+
+    # Create pyvips image from numpy array
+    h, w, bands = region_data.shape
+    img = pyvips.Image.new_from_memory(
+        region_data.tobytes(),
+        w, h, bands, 'uchar'
     )
 
-    # Set interpretation to RGB (not sRGB) to avoid color management
-    img_clean = img_clean.copy(interpretation=pyvips.Interpretation.RGB)
+    # Set interpretation to sRGB for proper display
+    img = img.copy(interpretation=pyvips.Interpretation.SRGB)
 
-    # Save as pyramidal TIFF with RGB JPEG (no YCbCr conversion in JPEG)
-    img_clean.tiffsave(
+    # Preserve resolution metadata (microns per pixel -> pixels per mm)
+    # This enables magnification calculations in viewers
+    mm_x = meta.get('mm_x')
+    mm_y = meta.get('mm_y')
+    if mm_x and mm_y:
+        # Convert mm/pixel to pixels/mm for TIFF resolution tags
+        xres = 1.0 / mm_x
+        yres = 1.0 / mm_y
+        img = img.copy(xres=xres, yres=yres)
+
+    # Save as pyramidal TIFF with JPEG compression
+    # IMPORTANT: Do NOT use rgbjpeg=True - it corrupts colors!
+    # Standard YCbCr JPEG works correctly.
+    img.tiffsave(
         output_path,
         compression='jpeg',
         Q=quality,
@@ -148,7 +173,6 @@ def convert_dicom_to_tiff(
         tile_width=tile_size,
         tile_height=tile_size,
         pyramid=True,
-        rgbjpeg=True,
         bigtiff=True,
     )
 

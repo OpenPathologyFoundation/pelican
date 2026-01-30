@@ -1,0 +1,33 @@
+[Unit]
+Description=DICOM WSI to Pyramidal TIFF Batch Converter
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/large_image_server
+
+# Environment configuration
+Environment=CONVERTER_INBOX=/data/inbox
+Environment=CONVERTER_SERVING=/data/serving
+Environment=CONVERTER_ARCHIVE=/data/archive
+Environment=CONVERTER_QUALITY=85
+Environment=CONVERTER_TILE_SIZE=256
+Environment=CONVERTER_MAX_CONCURRENT=2
+Environment=CONVERTER_WATCH_INTERVAL=10
+
+# Run in watch mode
+ExecStart=/opt/large_image_server/venv/bin/python /opt/large_image_server/scripts/batch_converter.py --watch
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=batch_converter
+
+[Install]
+WantedBy=multi-user.target
