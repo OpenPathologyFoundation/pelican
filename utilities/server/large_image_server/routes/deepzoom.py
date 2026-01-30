@@ -141,26 +141,25 @@ async def get_dzi_tile(
         metadata = source.getMetadata()
 
         # Convert DeepZoom level to large_image level
-        # DeepZoom: level 0 = 1x1, level n = 2^n pixels on longest side
-        # large_image: level 0 = lowest res, level (levels-1) = full res
         #
-        # DeepZoom max level = ceil(log2(max(width, height)))
+        # DeepZoom numbering: level 0 = 1x1 pixel, level N = 2^N pixels on longest side
+        # large_image numbering: level 0 = lowest res, level (levels-1) = full res
+        #
+        # The mapping is:
+        #   DeepZoom max level (dz_max_level) = full resolution
+        #   large_image max level (levels-1) = full resolution
+        #
+        # So: li_level = level - dz_max_level + (levels - 1)
+        #     li_level = level - (dz_max_level - levels + 1)
+        #
         max_dim = max(metadata['sizeX'], metadata['sizeY'])
         dz_max_level = math.ceil(math.log2(max_dim)) if max_dim > 0 else 0
 
-        # Calculate the equivalent large_image level
-        # DZ level 0 -> smallest tile
-        # DZ max level -> full resolution
-        # large_image level 0 -> 1 tile (lowest res)
-        # large_image level (levels-1) -> full res
+        # Calculate the level offset between DeepZoom and large_image
+        level_offset = dz_max_level - (metadata['levels'] - 1)
 
-        # The DZ level relative to tile grid
-        tile_size = metadata['tileWidth']
-        dz_tile_level = math.ceil(math.log2(tile_size)) if tile_size > 0 else 8
-
-        # Convert: large_image z = dz_level - dz_tile_level
-        # But we also need to account for the actual levels in large_image
-        li_level = level - dz_tile_level
+        # Convert DeepZoom level to large_image level
+        li_level = level - level_offset
 
         # Clamp to valid range
         if li_level < 0:
