@@ -8,12 +8,35 @@
 [![image](https://img.shields.io/pypi/v/large-image.svg?logo=python&logoColor=white)](https://pypi.org/project/large-image/)
 
 Pelican
-*Python modules to work with large, multiresolution images.*
+*Pathology Explorer for Large Images, Collaboration, Annotation, and Navigation.*
 
-Large Image is a Python library for working with large multi-resolution
-images, including whole slide images (WSI) for digital pathology and
-geospatial imagery. It provides efficient tiled access to images, format
-conversion, and a standalone FastAPI-based tile server.
+Pelican is a digital pathology platform for whole slide image (WSI)
+viewing, collaboration, and annotation. This repository brings together
+the core imaging library, a FastAPI tile server, and a modern web viewer
+so the platform can be developed and validated as a cohesive system.
+
+**What lives here**
+
+- `large_image` core library (forked and updated from Kitware's Large Image)
+- `large-image-server` FastAPI tile server used by the platform
+- `digital-viewer` Svelte-based UI, annotation tools, and session services
+- `dhf` Design History File for the Digital Viewer Module
+
+## How to Approach This Repository
+
+- Start with `digital-viewer/README.md` for the end-user experience and UI stack
+- Use `utilities/server/README.md` for tile server APIs and deployment
+- Treat `large_image/` as the shared imaging engine used by the server
+- Use `dhf/00-Index.md` for regulatory context, user needs, and requirements
+
+## Project Map
+
+  Pathology Explorer (Pelican)
+  ├─ digital-viewer/     Web UI, annotations, session services
+  ├─ utilities/server/   FastAPI tile server
+  ├─ large_image/        Imaging library and format support
+  ├─ dhf/                Design History File (Digital Viewer Module)
+  └─ docs/               Specifications and evaluations
 
 ## Credits / Origins
 
@@ -38,7 +61,12 @@ original Large Image project.
 For a detailed summary of all modifications made in this fork, see
 [FORK_CHANGES.md](FORK_CHANGES.md).
 
-## Highlights
+The imaging engine behind Pelican is a fork of the Large Image library.
+The sections below document the library and tile server for developers
+who want to use Pelican as a toolkit or integrate the imaging stack into
+other systems.
+
+## Large Image Highlights
 
 - **Tile serving made easy** - Built-in FastAPI tile server with XYZ,
   DeepZoom, and IIIF support
@@ -53,7 +81,7 @@ For a detailed summary of all modifications made in this fork, see
 - **Caching** - Optional Redis or Memcached caching for tile server
   performance
 
-## Quick Start
+## Library Quick Start
 
 ### Install
 
