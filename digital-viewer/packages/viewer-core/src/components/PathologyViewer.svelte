@@ -58,6 +58,7 @@
   import CaseSearch from './CaseSearch.svelte';
   import CaseSwitchDialog from './CaseSwitchDialog.svelte';
   import SlideGallery from './SlideGallery.svelte';
+  import SlideLabel from './SlideLabel.svelte';
   import Viewer from './Viewer.svelte';
   import MeasurementOverlay from './MeasurementOverlay.svelte';
   import ViewerToolsPanel from './ViewerToolsPanel.svelte';
@@ -72,6 +73,10 @@
 
   /** Tools panel visibility store */
   let toolsPanelOpen = $state(false);
+
+  /** Slide info modal state */
+  let showSlideInfoModal = $state(false);
+  let slideInfoSlideId = $state<string | null>(null);
 
   /** Props */
   interface Props {
@@ -309,6 +314,18 @@
   /** Handle slide selection from gallery */
   function handleSlideSelect(data: { slide: SlideInfo }): void {
     selectSlide(data.slide);
+  }
+
+  /** Handle slide info request from gallery */
+  function handleSlideInfo(data: { slide: SlideInfo }): void {
+    slideInfoSlideId = data.slide.slideId;
+    showSlideInfoModal = true;
+  }
+
+  /** Close slide info modal */
+  function closeSlideInfoModal(): void {
+    showSlideInfoModal = false;
+    slideInfoSlideId = null;
   }
 
   /** Toggle left panel */
@@ -565,6 +582,7 @@
             caseId={currentCase.caseId}
             {slides}
             onslideselect={handleSlideSelect}
+            onslideinfo={handleSlideInfo}
           />
         {:else}
           <div class="pathology-viewer__empty">
@@ -651,6 +669,18 @@
     onconfirm={confirmCaseSwitch}
     oncancel={cancelCaseSwitch}
   />
+
+  <!-- Slide Info Modal (triggered by ? button in gallery) -->
+  {#if slideInfoSlideId}
+    <SlideLabel
+      mode="modal"
+      open={showSlideInfoModal}
+      slideId={slideInfoSlideId}
+      showLabelImage={true}
+      showMacroImage={true}
+      onclose={closeSlideInfoModal}
+    />
+  {/if}
 </div>
 
 <style>

@@ -1,5 +1,6 @@
 """Case management endpoints for pathology workflow."""
 
+import io
 import json
 from pathlib import Path
 from typing import Any
@@ -23,10 +24,70 @@ def _get_cases_json_path() -> Path:
     return settings.image_dir / 'cases.json'
 
 
-def _get_associated_images_dir() -> Path:
-    """Get the path to associated_images directory."""
-    settings = get_settings()
-    return settings.image_dir / 'associated_images'
+def _get_slide_image_path(case: dict, slide: dict) -> str:
+    """Get the image path for a slide relative to image_dir."""
+    case_id = case.get('caseId')
+    filename = slide.get('filename')
+    return f'{case_id}/{filename}'
+
+
+def _generate_label_image(slide_id: str, width: int = 400, height: int = 150) -> bytes:
+    """Generate a simple label image with slide ID text.
+
+    Creates a white background with black text showing the slide ID.
+    Optionally includes a 1D barcode if python-barcode is available.
+
+    Args:
+        slide_id: The slide identifier to display.
+        width: Image width in pixels.
+        height: Image height in pixels.
+
+    Returns:
+        PNG image data as bytes.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    # Create white background
+    img = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(img)
+
+    # Draw border
+    draw.rectangle([0, 0, width - 1, height - 1], outline='black', width=2)
+
+    # Try to use a nice font, fall back to default
+    font_size = 24
+    small_font_size = 14
+    try:
+        font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', font_size)
+        small_font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', small_font_size)
+    except (OSError, IOError):
+        font = ImageFont.load_default()
+        small_font = font
+
+    # Draw "SLIDE LABEL" header
+    header_text = "SLIDE LABEL"
+    header_bbox = draw.textbbox((0, 0), header_text, font=small_font)
+    header_width = header_bbox[2] - header_bbox[0]
+    draw.text(((width - header_width) / 2, 10), header_text, fill='gray', font=small_font)
+
+    # Draw slide ID centered
+    text_bbox = draw.textbbox((0, 0), slide_id, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+    x = (width - text_width) / 2
+    y = (height - text_height) / 2
+    draw.text((x, y), slide_id, fill='black', font=font)
+
+    # Draw "Generated - No physical label available" footer
+    footer_text = "Generated - No physical label available"
+    footer_bbox = draw.textbbox((0, 0), footer_text, font=small_font)
+    footer_width = footer_bbox[2] - footer_bbox[0]
+    draw.text(((width - footer_width) / 2, height - 25), footer_text, fill='gray', font=small_font)
+
+    # Save to bytes
+    output = io.BytesIO()
+    img.save(output, format='PNG')
+    return output.getvalue()
 
 
 def _load_cases() -> dict[str, Any]:
@@ -220,114 +281,241 @@ async def get_slide_file_path(
 @router.get(
     '/slides/{slide_id}/label',
     summary='Get slide label image',
-    description='Get the barcode label image for a slide.',
+    description='Get the barcode label image for a slide. '
+    'Extracts from source file if available, otherwise generates a placeholder.',
     responses={
-        200: {'content': {'image/png': {}}},
-        404: {'description': 'Label not found'},
+        200: {'content': {'image/png': {}, 'image/jpeg': {}}},
+        404: {'description': 'Slide not found'},
     },
 )
-async def get_slide_label(slide_id: str) -> Response:
+async def get_slide_label(
+    slide_id: str,
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> Response:
     """Get the label image for a slide.
+
+    Priority:
+    1. Extract embedded label from source file (SVS, etc.)
+    2. Generate a placeholder label with slide ID
 
     Args:
         slide_id: The slide identifier.
 
     Returns:
-        Label image (PNG).
+        Label image (PNG or JPEG).
     """
-    # First check if slide exists in cases
     result = _get_slide_by_id(slide_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
 
-    # Look for label in associated_images directory
-    assoc_dir = _get_associated_images_dir()
-    label_path = assoc_dir / f'{slide_id}_label.png'
+    case, slide = result
+    image_path = _get_slide_image_path(case, slide)
 
-    if not label_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f'Label image not found for slide: {slide_id}',
-        )
+    # Try to extract embedded label from source file
+    try:
+        source = source_manager.get_source(image_path)
+        assoc_list = source.getAssociatedImagesList()
 
-    return FileResponse(
-        label_path,
+        if 'label' in assoc_list:
+            image_data, mime_type = source.getAssociatedImage('label')
+            return Response(
+                content=image_data,
+                media_type=mime_type or 'image/jpeg',
+                headers={'Cache-Control': 'public, max-age=86400'},
+            )
+    except Exception:
+        pass  # Fall through to generated label
+
+    # Generate a placeholder label
+    label_data = _generate_label_image(slide_id)
+    return Response(
+        content=label_data,
         media_type='image/png',
-        headers={'Cache-Control': 'public, max-age=86400'},
+        headers={
+            'Cache-Control': 'public, max-age=86400',
+            'X-Generated': 'true',  # Indicate this is a generated label
+        },
     )
 
 
 @router.get(
     '/slides/{slide_id}/macro',
     summary='Get slide macro image',
-    description='Get the macro (gross/overview) image for a slide.',
+    description='Get the macro (gross/overview) image for a slide. '
+    'Extracts from source file if available.',
     responses={
-        200: {'content': {'image/png': {}}},
+        200: {'content': {'image/png': {}, 'image/jpeg': {}}},
         404: {'description': 'Macro image not found'},
     },
 )
-async def get_slide_macro(slide_id: str) -> Response:
+async def get_slide_macro(
+    slide_id: str,
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> Response:
     """Get the macro image for a slide.
+
+    Macro images show the physical slide overview and cannot be synthesized.
+    Returns 404 if not embedded in the source file.
 
     Args:
         slide_id: The slide identifier.
 
     Returns:
-        Macro image (PNG).
+        Macro image (PNG or JPEG).
     """
-    # First check if slide exists in cases
     result = _get_slide_by_id(slide_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
 
-    # Look for macro in associated_images directory
-    assoc_dir = _get_associated_images_dir()
-    macro_path = assoc_dir / f'{slide_id}_macro.png'
+    case, slide = result
+    image_path = _get_slide_image_path(case, slide)
 
-    if not macro_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f'Macro image not found for slide: {slide_id}',
+    # Try to extract embedded macro from source file
+    try:
+        source = source_manager.get_source(image_path)
+        assoc_list = source.getAssociatedImagesList()
+
+        if 'macro' in assoc_list:
+            image_data, mime_type = source.getAssociatedImage('macro')
+            return Response(
+                content=image_data,
+                media_type=mime_type or 'image/jpeg',
+                headers={'Cache-Control': 'public, max-age=86400'},
+            )
+    except Exception:
+        pass
+
+    # Macro images cannot be synthesized - they show physical slide context
+    raise HTTPException(
+        status_code=404,
+        detail=f'Macro image not available for slide: {slide_id}. '
+        'Macro images must be embedded in the source file.',
+    )
+
+
+@router.get(
+    '/slides/{slide_id}/thumbnail',
+    summary='Get slide thumbnail',
+    description='Get a thumbnail image for a slide. '
+    'Extracts from source file or generates from pyramid.',
+    responses={
+        200: {'content': {'image/png': {}, 'image/jpeg': {}}},
+        404: {'description': 'Slide not found'},
+    },
+)
+async def get_slide_thumbnail(
+    slide_id: str,
+    width: int = 256,
+    height: int = 256,
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> Response:
+    """Get a thumbnail image for a slide.
+
+    Priority:
+    1. Extract embedded thumbnail from source file
+    2. Generate from lowest pyramid level
+
+    Args:
+        slide_id: The slide identifier.
+        width: Maximum thumbnail width.
+        height: Maximum thumbnail height.
+
+    Returns:
+        Thumbnail image (PNG or JPEG).
+    """
+    result = _get_slide_by_id(slide_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
+
+    case, slide = result
+    image_path = _get_slide_image_path(case, slide)
+
+    try:
+        source = source_manager.get_source(image_path)
+
+        # First try embedded thumbnail
+        assoc_list = source.getAssociatedImagesList()
+        if 'thumbnail' in assoc_list:
+            image_data, mime_type = source.getAssociatedImage('thumbnail')
+            return Response(
+                content=image_data,
+                media_type=mime_type or 'image/jpeg',
+                headers={'Cache-Control': 'public, max-age=86400'},
+            )
+
+        # Generate from pyramid
+        image_data, mime_type = source.getThumbnail(
+            width=width,
+            height=height,
+            encoding='JPEG',
+        )
+        return Response(
+            content=image_data,
+            media_type=mime_type or 'image/jpeg',
+            headers={
+                'Cache-Control': 'public, max-age=86400',
+                'X-Generated': 'true',
+            },
         )
 
-    return FileResponse(
-        macro_path,
-        media_type='image/png',
-        headers={'Cache-Control': 'public, max-age=86400'},
-    )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to generate thumbnail: {e}',
+        ) from e
 
 
 @router.get(
     '/slides/{slide_id}/associated',
     summary='List associated images for slide',
-    description='Get list of available associated images (label, macro) for a slide.',
+    description='Get list of available associated images (thumbnail, label, macro) for a slide.',
     responses={404: {'description': 'Slide not found'}},
 )
-async def list_slide_associated_images(slide_id: str) -> list[str]:
+async def list_slide_associated_images(
+    slide_id: str,
+    source_manager: SourceManager = Depends(get_source_manager),
+) -> dict[str, Any]:
     """List available associated images for a slide.
 
-    Checks both the SVS file's embedded images and the associated_images directory.
+    Checks embedded images in the source file and indicates which
+    images can be generated as fallback.
 
     Args:
         slide_id: The slide identifier.
 
     Returns:
-        List of available associated image names.
+        Dictionary with available images and their sources.
     """
     result = _get_slide_by_id(slide_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
 
-    available = []
+    case, slide = result
+    image_path = _get_slide_image_path(case, slide)
 
-    # Check associated_images directory
-    assoc_dir = _get_associated_images_dir()
-    if (assoc_dir / f'{slide_id}_label.png').exists():
-        available.append('label')
-    if (assoc_dir / f'{slide_id}_macro.png').exists():
-        available.append('macro')
+    # Check what's embedded in the source file
+    embedded = []
+    try:
+        source = source_manager.get_source(image_path)
+        embedded = source.getAssociatedImagesList()
+    except Exception:
+        pass
 
-    return available
+    return {
+        'thumbnail': {
+            'available': True,  # Always available (embedded or generated)
+            'source': 'embedded' if 'thumbnail' in embedded else 'generated',
+        },
+        'label': {
+            'available': True,  # Always available (embedded or generated)
+            'source': 'embedded' if 'label' in embedded else 'generated',
+        },
+        'macro': {
+            'available': 'macro' in embedded,
+            'source': 'embedded' if 'macro' in embedded else None,
+        },
+        'embedded_images': embedded,  # Raw list from source
+    }
 
 
 @router.get(

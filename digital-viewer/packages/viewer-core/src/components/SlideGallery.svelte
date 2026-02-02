@@ -4,6 +4,7 @@
    *
    * Displays slides grouped by part/block with thumbnail previews.
    * Supports selection and part/block grouping per spec Section 6.
+   * Includes hover preview for label images and info button.
    */
 
   import { currentSlideId } from '../stores';
@@ -18,11 +19,19 @@
     slides: SlideInfo[];
     /** Callback when a slide is selected */
     onslideselect?: (data: { slide: SlideInfo }) => void;
+    /** Callback when slide info is requested */
+    onslideinfo?: (data: { slide: SlideInfo }) => void;
   }
 
-  let { caseId, slides, onslideselect }: Props = $props();
+  let { caseId, slides, onslideselect, onslideinfo }: Props = $props();
 
   const client = getApiClient();
+
+  /** Hover preview state */
+  let hoverSlide = $state<SlideInfo | null>(null);
+  let hoverTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+  let hoverPosition = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+  let showPreview = $state(false);
 
   /** Computed: slides grouped by part */
   let groupedSlides = $derived(groupSlidesByPart(slides));
@@ -45,15 +54,54 @@
     return groups;
   }
 
-  /** Get macro image URL for a slide */
-  function getMacroUrl(slideId: string): string {
-    return client.getSlideMacroUrl(slideId);
+  /** Get thumbnail image URL for a slide */
+  function getThumbnailUrl(slideId: string): string {
+    return client.getSlideThumbnailUrl(slideId, 140, 100);
+  }
+
+  /** Get label image URL for a slide */
+  function getLabelUrl(slideId: string): string {
+    return client.getSlideLabelUrl(slideId);
   }
 
   /** Handle slide selection */
   function selectSlide(slide: SlideInfo): void {
     currentSlideId.set(slide.slideId);
     onslideselect?.({ slide });
+  }
+
+  /** Handle slide info button click */
+  function showSlideInfo(slide: SlideInfo, event: MouseEvent): void {
+    event.stopPropagation();
+    onslideinfo?.({ slide });
+  }
+
+  /** Handle mouse enter - start hover timer */
+  function handleMouseEnter(slide: SlideInfo, event: MouseEvent): void {
+    // Clear any existing timeout
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+    }
+
+    // Start 2-second timer for preview
+    hoverTimeout = setTimeout(() => {
+      hoverSlide = slide;
+      showPreview = true;
+    }, 2000);
+
+    // Track position for preview placement
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    hoverPosition = { x: rect.right + 10, y: rect.top };
+  }
+
+  /** Handle mouse leave - cancel hover timer */
+  function handleMouseLeave(): void {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      hoverTimeout = null;
+    }
+    showPreview = false;
+    hoverSlide = null;
   }
 
   /** Handle image error (fallback) */
@@ -80,35 +128,69 @@
         </div>
 
         {#each partSlides as slide}
-          <button
-            class="slide-item"
-            class:selected={$currentSlideId === slide.slideId}
-            onclick={() => selectSlide(slide)}
+          <div
+            class="slide-item-wrapper"
+            onmouseenter={(e) => handleMouseEnter(slide, e)}
+            onmouseleave={handleMouseLeave}
           >
-            <div class="slide-item__thumb">
-              <img
-                src={getMacroUrl(slide.slideId)}
-                alt=""
-                onerror={handleImageError}
-                loading="lazy"
-              />
-            </div>
-            <div class="slide-item__info">
-              <span class="slide-item__id">{slide.slideId}</span>
-              <span class="slide-item__stain">{slide.stain}</span>
-              {#if slide.blockDescription}
-                <span class="slide-item__desc">{slide.blockDescription}</span>
-              {/if}
-              {#if slide.notes}
-                <span class="slide-item__notes">{slide.notes}</span>
-              {/if}
-            </div>
-          </button>
+            <button
+              class="slide-item"
+              class:selected={$currentSlideId === slide.slideId}
+              onclick={() => selectSlide(slide)}
+            >
+              <div class="slide-item__thumb">
+                <img
+                  src={getThumbnailUrl(slide.slideId)}
+                  alt=""
+                  onerror={handleImageError}
+                  loading="lazy"
+                />
+              </div>
+              <div class="slide-item__info">
+                <span class="slide-item__id">{slide.slideId}</span>
+                <span class="slide-item__stain">{slide.stain}</span>
+                {#if slide.blockDescription}
+                  <span class="slide-item__desc">{slide.blockDescription}</span>
+                {/if}
+                {#if slide.notes}
+                  <span class="slide-item__notes">{slide.notes}</span>
+                {/if}
+              </div>
+            </button>
+            <!-- Info button -->
+            <button
+              class="slide-item__info-btn"
+              onclick={(e) => showSlideInfo(slide, e)}
+              title="View slide information"
+              aria-label="View slide information for {slide.slideId}"
+            >
+              ?
+            </button>
+          </div>
         {/each}
       </div>
     {/each}
   </div>
 </div>
+
+<!-- Hover Preview Popup -->
+{#if showPreview && hoverSlide}
+  <div
+    class="label-preview"
+    style="left: {hoverPosition.x}px; top: {hoverPosition.y}px;"
+  >
+    <div class="label-preview__header">
+      <span class="label-preview__title">Label</span>
+      <span class="label-preview__slide-id">{hoverSlide.slideId}</span>
+    </div>
+    <img
+      src={getLabelUrl(hoverSlide.slideId)}
+      alt="Slide label for {hoverSlide.slideId}"
+      class="label-preview__image"
+      onerror={handleImageError}
+    />
+  </div>
+{/if}
 
 <style>
   .slide-gallery {
@@ -251,5 +333,82 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Slide item wrapper for positioning info button */
+  .slide-item-wrapper {
+    position: relative;
+  }
+
+  /* Info button */
+  .slide-item__info-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(59, 130, 246, 0.9);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms, background 150ms;
+    z-index: 10;
+  }
+
+  .slide-item-wrapper:hover .slide-item__info-btn {
+    opacity: 1;
+  }
+
+  .slide-item__info-btn:hover {
+    background: rgba(59, 130, 246, 1);
+  }
+
+  /* Label preview popup */
+  .label-preview {
+    position: fixed;
+    z-index: 200;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    max-width: 420px;
+    pointer-events: none;
+  }
+
+  .label-preview__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid #374151;
+  }
+
+  .label-preview__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+  }
+
+  .label-preview__slide-id {
+    font-size: 12px;
+    font-weight: 500;
+    color: #60a5fa;
+  }
+
+  .label-preview__image {
+    display: block;
+    max-width: 100%;
+    height: auto;
   }
 </style>

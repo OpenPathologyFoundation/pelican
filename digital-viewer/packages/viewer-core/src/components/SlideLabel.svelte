@@ -2,17 +2,25 @@
   /**
    * SlideLabel Component
    *
-   * Display slide label, barcode, and metadata information
+   * Display slide label, barcode, macro image, and metadata information
    * Per SRS UN-SAF-006 - Slide Label/Barcode View
+   *
+   * Label and macro images are fetched from the tile server API,
+   * which extracts them from the source file or generates fallbacks.
    */
 
-  import { slideMetadata } from '../stores';
+  import { slideMetadata, currentSlideId } from '../stores';
+  import { getApiClient } from '../api-client';
 
   /** Props */
   interface Props {
     mode?: 'compact' | 'full' | 'modal';
     showBarcode?: boolean;
     showLabelImage?: boolean;
+    showMacroImage?: boolean;
+    slideId?: string | null;
+    /** External control for modal visibility (used when mode='modal') */
+    open?: boolean;
     onclose?: () => void;
   }
 
@@ -20,20 +28,48 @@
     mode = 'compact',
     showBarcode = true,
     showLabelImage = true,
+    showMacroImage = true,
+    slideId = null,
+    open = undefined,
     onclose,
   }: Props = $props();
 
-  /** State */
-  let showModal = $state(false);
+  const client = getApiClient();
 
-  /** Open modal view */
+  /** State - modal visibility (internal or external control) */
+  let internalShowModal = $state(false);
+
+  /** Derived: effective modal visibility */
+  let showModal = $derived(
+    mode === 'modal' && open !== undefined ? open : internalShowModal
+  );
+  let labelImageError = $state(false);
+  let macroImageError = $state(false);
+
+  /** Derived: effective slide ID (from prop or store) */
+  let effectiveSlideId = $derived(slideId || $currentSlideId || $slideMetadata?.slideId || null);
+
+  /** Derived: Label image URL from API */
+  let labelImageUrl = $derived(
+    effectiveSlideId ? client.getSlideLabelUrl(effectiveSlideId) : ''
+  );
+
+  /** Derived: Macro image URL from API */
+  let macroImageUrl = $derived(
+    effectiveSlideId ? client.getSlideMacroUrl(effectiveSlideId) : ''
+  );
+
+  /** Open modal view (internal control) */
   function openModal(): void {
-    showModal = true;
+    internalShowModal = true;
+    // Reset error states when opening
+    labelImageError = false;
+    macroImageError = false;
   }
 
   /** Close modal view */
   function closeModal(): void {
-    showModal = false;
+    internalShowModal = false;
     onclose?.();
   }
 
@@ -49,6 +85,16 @@
     if (event.key === 'Escape' && showModal) {
       closeModal();
     }
+  }
+
+  /** Handle label image error */
+  function handleLabelError(): void {
+    labelImageError = true;
+  }
+
+  /** Handle macro image error */
+  function handleMacroError(): void {
+    macroImageError = true;
   }
 
   /** Format date for display */
@@ -71,7 +117,6 @@
   /** Derived: Get metadata properties */
   let properties = $derived($slideMetadata?.properties as Record<string, unknown> || {});
   let barcode = $derived((properties.barcode as string) || (properties.slide_barcode as string) || '');
-  let labelImageUrl = $derived((properties.labelImageUrl as string) || (properties.label_image as string) || '');
   let specimenPart = $derived((properties.specimen_part as string) || (properties.tissueType as string) || '');
   let blockId = $derived((properties.block_id as string) || (properties.blockLabel as string) || '');
   let stain = $derived((properties.stain as string) || (properties.stainType as string) || '');
@@ -186,13 +231,27 @@
         {/if}
 
         <!-- Label Image -->
-        {#if showLabelImage && labelImageUrl}
+        {#if showLabelImage && labelImageUrl && !labelImageError}
           <div class="label-image-container">
             <span class="label-key">Label Image</span>
             <img
               src={labelImageUrl}
               alt="Slide label"
               class="label-image"
+              onerror={handleLabelError}
+            />
+          </div>
+        {/if}
+
+        <!-- Macro Image -->
+        {#if showMacroImage && macroImageUrl && !macroImageError}
+          <div class="label-image-container">
+            <span class="label-key">Macro Image</span>
+            <img
+              src={macroImageUrl}
+              alt="Slide macro"
+              class="label-image"
+              onerror={handleMacroError}
             />
           </div>
         {/if}
@@ -318,17 +377,34 @@
               </div>
             </div>
 
-            <!-- Right column: Label image -->
-            {#if showLabelImage && labelImageUrl}
-              <div class="modal-image">
-                <span class="info-label">Label Image</span>
-                <img
-                  src={labelImageUrl}
-                  alt="Slide label"
-                  class="label-image-large"
-                />
-              </div>
-            {/if}
+            <!-- Right column: Images -->
+            <div class="modal-images">
+              <!-- Label Image -->
+              {#if showLabelImage && labelImageUrl && !labelImageError}
+                <div class="modal-image">
+                  <span class="info-label">Label Image</span>
+                  <img
+                    src={labelImageUrl}
+                    alt="Slide label"
+                    class="label-image-large"
+                    onerror={handleLabelError}
+                  />
+                </div>
+              {/if}
+
+              <!-- Macro Image -->
+              {#if showMacroImage && macroImageUrl && !macroImageError}
+                <div class="modal-image">
+                  <span class="info-label">Macro Image</span>
+                  <img
+                    src={macroImageUrl}
+                    alt="Slide macro overview"
+                    class="label-image-large"
+                    onerror={handleMacroError}
+                  />
+                </div>
+              {/if}
+            </div>
           </div>
         {:else}
           <div class="no-slide">No slide loaded</div>
@@ -592,6 +668,12 @@
     color: #d1d5db;
   }
 
+  .modal-images {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .modal-image {
     display: flex;
     flex-direction: column;
@@ -599,7 +681,7 @@
   }
 
   .label-image-large {
-    max-width: 200px;
+    max-width: 220px;
     border-radius: 6px;
     border: 1px solid #374151;
   }

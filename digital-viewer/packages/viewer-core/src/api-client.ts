@@ -299,13 +299,28 @@ export class TileServerClient {
   }
 
   /** Get slide label image URL */
-  getSllideLabelUrl(slideId: string): string {
+  getSlideLabelUrl(slideId: string): string {
     return `${this.baseUrl}/slides/${encodeURIComponent(slideId)}/label`;
   }
 
   /** Get slide macro image URL */
   getSlideMacroUrl(slideId: string): string {
     return `${this.baseUrl}/slides/${encodeURIComponent(slideId)}/macro`;
+  }
+
+  /** Get slide thumbnail image URL */
+  getSlideThumbnailUrl(slideId: string, width = 256, height = 256): string {
+    return `${this.baseUrl}/slides/${encodeURIComponent(slideId)}/thumbnail?width=${width}&height=${height}`;
+  }
+
+  /** Get slide associated images info */
+  async getSlideAssociatedImagesInfo(slideId: string): Promise<{
+    thumbnail: { available: boolean; source: string | null };
+    label: { available: boolean; source: string | null };
+    macro: { available: boolean; source: string | null };
+    embedded_images: string[];
+  }> {
+    return this.fetch(`/slides/${encodeURIComponent(slideId)}/associated`);
   }
 
   // ============ Image/Tile Endpoints ============

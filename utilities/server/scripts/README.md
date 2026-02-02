@@ -26,7 +26,7 @@ python batch_converter.py \
 
 #or better
 
-    python batch_converter.py \
+    python utilities/server/scripts/batch_converter.py \
   --inbox "$HOME/_wsi_test/inbox" \
   --serving "$HOME/_wsi_test/serving" \
   --archive "$HOME/_wsi_test/archive"
@@ -109,7 +109,7 @@ The converter uses a custom DICOM to TIFF conversion pipeline that preserves
 H&E staining colors correctly. This is important because:
 
 1. **ICC Profile Handling**: When pyvips/openslide reads DICOM files, they
-   may add an sRGB ICC profile that causes color transformations. The converter
+   may add an sRGB ICC p[dhf](../../../dhf)rofile that causes color transformations. The converter
    strips this ICC profile to preserve original pixel values.
 
 2. **RGB JPEG Encoding**: The converter uses RGB JPEG encoding (not YCbCr)
