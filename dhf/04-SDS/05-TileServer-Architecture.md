@@ -3,7 +3,7 @@
 ---
 document_id: SDS-TLS-001
 title: Digital Viewer Module — Tile Server (Image Management Service) Architecture
-version: 1.0
+version: 1.1
 status: ACTIVE
 owner: Engineering
 created_date: 2026-01-22
@@ -241,7 +241,103 @@ GET /thumbnail/{image_id}?width=256&height=256
 GET /region/{image_id}?left=1000&top=1000&width=500&height=500
 ```
 
-### 3.7 Multi-Channel Support (MOD-TLS-007)
+### 3.7 Associated Images Router (MOD-TLS-008)
+
+| Element | Description |
+|:--------|:------------|
+| **Module** | `large_image_server.routes.cases` |
+| **Responsibility** | Serve associated images (label, macro, thumbnail) with fallback generation |
+| **Trace to Requirements** | SYS-IMS-039, SYS-IMS-040, SYS-IMS-041, SYS-IMS-042, SYS-IMS-043, SYS-IMS-044, SYS-IMS-045 |
+
+**Endpoints:**
+```
+GET /slides/{slide_id}/label        # Label image (embedded or generated)
+GET /slides/{slide_id}/macro        # Macro image (embedded only)
+GET /slides/{slide_id}/thumbnail    # Thumbnail (embedded or generated from pyramid)
+GET /slides/{slide_id}/associated   # Availability info for all types
+```
+
+**Design Decision — Runtime Extraction with Fallback Generation:**
+
+The system extracts associated images at runtime rather than requiring pre-extracted files:
+
+| Approach | Storage Cost | Flexibility | Maintenance |
+|:---------|:-------------|:------------|:------------|
+| Pre-extracted files | High (3 files per slide) | Low (regenerate on change) | High |
+| **Runtime extraction** | Zero | High (dynamic) | Low |
+
+**Fallback Behavior:**
+
+| Image Type | Primary Source | Fallback | Generated Content |
+|:-----------|:---------------|:---------|:------------------|
+| Label | Embedded in slide file | Generate placeholder | Slide ID, header, border |
+| Macro | Embedded in slide file | None (404) | N/A |
+| Thumbnail | Embedded in slide file | Extract from pyramid | Downsampled from level 0 |
+
+**Implementation:**
+```python
+@router.get('/slides/{slide_id}/label')
+async def get_slide_label(slide_id: str):
+    source = source_manager.get_source(slide_id)
+    # Try embedded label first
+    try:
+        label_data = source.getAssociatedImage('label')
+        if label_data:
+            return Response(content=label_data, media_type='image/jpeg')
+    except Exception:
+        pass
+    # Generate placeholder label
+    return Response(content=_generate_label_image(slide_id), media_type='image/png')
+```
+
+**Associated Images Info Response Schema:**
+```json
+{
+  "thumbnail": {"available": true, "source": "generated"},
+  "label": {"available": true, "source": "embedded"},
+  "macro": {"available": false, "source": null},
+  "embedded_images": ["label"]
+}
+```
+
+### 3.8 Color Fidelity Module (MOD-TLS-009)
+
+| Element | Description |
+|:--------|:------------|
+| **Module** | Color management in source_manager and tile routes |
+| **Responsibility** | Preserve original pixel colors without ICC profile transformations |
+| **Trace to Requirements** | SYS-IMS-046, SYS-IMS-047 |
+
+**Design Decision — Disable ICC Profile Application:**
+
+ICC profiles embedded in medical images can cause color transformations that alter tissue appearance. The system explicitly disables ICC profile application to preserve diagnostic color fidelity.
+
+| Approach | Color Accuracy | Display Calibration | Risk |
+|:---------|:---------------|:--------------------|:-----|
+| Apply ICC profiles | Device-calibrated | Better on calibrated displays | Colors may shift; diagnostic impact |
+| **Disable ICC** | Raw pixel values | Consistent across displays | Preferred for pathology |
+
+**Implementation:**
+```python
+# In source_manager.py
+def get_source(self, image_id: str, style: dict = None) -> TileSource:
+    open_kwargs = {}
+    # Always disable ICC profile application
+    if style:
+        if isinstance(style, dict) and 'icc' not in style:
+            style = {**style, 'icc': False}
+        open_kwargs['style'] = style
+    else:
+        open_kwargs['style'] = {'icc': False}
+    return large_image.open(image_path, **open_kwargs)
+
+# In tile routes
+tile_data = source.getTile(x, y, z, frame=frame, applyStyle=False)
+```
+
+**Rationale:** Pathologists rely on consistent tissue coloration across viewing sessions. ICC profile transformations, while appropriate for consumer photography, can alter the appearance of H&E stains and special stains in ways that affect diagnostic interpretation.
+
+### 3.9 Multi-Channel Support (MOD-TLS-007)
 
 | Element | Description |
 |:--------|:------------|
@@ -414,6 +510,8 @@ spec:
 | MOD-TLS-005 (Metadata Router) | SYS-IMS-013, SYS-IMS-014, SYS-IMS-023, SYS-IMS-024, SYS-IMS-025, SYS-IMS-026 |
 | MOD-TLS-006 (Region Router) | SYS-IMS-015, SYS-IMS-016 |
 | MOD-TLS-007 (Multi-Channel) | SYS-IMS-027, SYS-IMS-028, SYS-IMS-029, SYS-IMS-030 |
+| MOD-TLS-008 (Associated Images) | SYS-IMS-039, SYS-IMS-040, SYS-IMS-041, SYS-IMS-042, SYS-IMS-043, SYS-IMS-044, SYS-IMS-045 |
+| MOD-TLS-009 (Color Fidelity) | SYS-IMS-046, SYS-IMS-047 |
 | Format Plugins | SYS-IMS-001 through SYS-IMS-009 |
 | Caching Layer | SYS-IMS-032, SYS-IMS-033, SYS-IMS-034 |
 | Deployment | SYS-IMS-038 |
@@ -454,6 +552,7 @@ spec:
 | Version | Date | Author | Description |
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-22 | Engineering | Initial Tile Server architecture derived from library evaluation |
+| 1.1 | 2026-02-02 | Engineering | Added MOD-TLS-008 (Associated Images with fallback generation), MOD-TLS-009 (Color Fidelity) |
 
 ---
 

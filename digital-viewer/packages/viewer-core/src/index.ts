@@ -116,6 +116,15 @@ export {
   type NavigationHistoryEntry,
 } from './stores/navigation-history';
 
+// Orchestrator Bridge (two-window architecture)
+export { OrchestratorBridge, type BridgeState } from './orchestrator-bridge';
+export type {
+  OrchestratorMessage,
+  ViewerMessage,
+  InitPayload,
+  ViewerAuditEvent,
+} from './types/orchestrator-messages';
+
 // Tile Source
 export { TileSourceFactory, fetchSlideMetadata } from './tile-source';
 

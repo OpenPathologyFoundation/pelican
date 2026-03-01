@@ -5,6 +5,143 @@ import sys
 from pathlib import Path
 
 
+def _run_offline_command(args) -> int:
+    """Run --backfill-hmac, --verify-all, or --backfill-metadata without starting the server."""
+    from .config import get_settings
+    from . import db
+
+    settings = get_settings()
+
+    if not settings.storage_db_url:
+        print('Error: --db-url is required for offline commands', file=sys.stderr)
+        return 1
+    if not settings.storage_clinical_root:
+        print('Error: --clinical-root is required for offline commands', file=sys.stderr)
+        return 1
+    if (args.backfill_hmac or args.verify_all) and not settings.hmac_key:
+        print('Error: --hmac-key is required for HMAC commands', file=sys.stderr)
+        return 1
+
+    if not db.is_configured():
+        print('Error: Could not connect to database', file=sys.stderr)
+        return 1
+
+    if args.backfill_hmac:
+        from .hmac_util import compute_file_hmac
+        slides = db.list_slides_missing_hmac()
+        print(f'Found {len(slides)} slides with NULL hmac')
+
+        processed = 0
+        skipped = 0
+        errors = 0
+        for slide in slides:
+            slide_id = slide['slide_id']
+            file_path = settings.storage_clinical_root / slide['relative_path']
+
+            if not file_path.exists():
+                print(f'  SKIP {slide_id}: file not found')
+                skipped += 1
+                continue
+
+            try:
+                hmac_hex = compute_file_hmac(file_path, settings.hmac_key)
+                db.update_slide_hmac(slide_id, hmac_hex)
+                processed += 1
+                print(f'  OK   {slide_id}: {hmac_hex[:16]}...')
+            except Exception as e:
+                print(f'  ERR  {slide_id}: {e}', file=sys.stderr)
+                errors += 1
+
+        print(f'\nBackfill complete: {processed} processed, {skipped} skipped, {errors} errors')
+        return 1 if errors else 0
+
+    if args.verify_all:
+        import hmac as hmac_mod
+        from .hmac_util import compute_file_hmac
+
+        slides = db.list_slides_for_verification()
+        print(f'Found {len(slides)} slides to verify')
+
+        verified = 0
+        failed = 0
+        missing = 0
+        for slide in slides:
+            slide_id = slide['slide_id']
+            stored_hmac = slide['hmac']
+            file_path = settings.storage_clinical_root / slide['relative_path']
+
+            if not file_path.exists():
+                print(f'  MISS {slide_id}: file not found')
+                missing += 1
+                continue
+
+            try:
+                actual_hmac = compute_file_hmac(file_path, settings.hmac_key)
+            except Exception as e:
+                print(f'  ERR  {slide_id}: {e}', file=sys.stderr)
+                failed += 1
+                continue
+
+            if hmac_mod.compare_digest(actual_hmac, stored_hmac):
+                db.update_slide_verified(slide_id)
+                verified += 1
+                print(f'  OK   {slide_id}')
+            else:
+                failed += 1
+                print(f'  FAIL {slide_id}: expected={stored_hmac[:16]}... actual={actual_hmac[:16]}...')
+
+        print(f'\nVerification complete: {verified} verified, {failed} failed, {missing} missing')
+        return 1 if failed else 0
+
+    if args.backfill_metadata:
+        from .routes.ingest import _extract_metadata
+
+        slides = db.list_slides_missing_metadata()
+        print(f'Found {len(slides)} slides with NULL metadata')
+
+        processed = 0
+        skipped = 0
+        errors = 0
+        for slide in slides:
+            slide_id = slide['slide_id']
+            file_path = settings.storage_clinical_root / slide['relative_path']
+
+            if not file_path.exists():
+                print(f'  SKIP {slide_id}: file not found')
+                skipped += 1
+                continue
+
+            try:
+                meta = _extract_metadata(file_path)
+                if not meta.get('width_px'):
+                    print(f'  SKIP {slide_id}: no dimensions extracted')
+                    skipped += 1
+                    continue
+
+                db.update_slide_metadata(
+                    slide_id,
+                    width_px=meta.get('width_px'),
+                    height_px=meta.get('height_px'),
+                    magnification=meta.get('magnification'),
+                    mpp_x=meta.get('mpp_x'),
+                    mpp_y=meta.get('mpp_y'),
+                    scanner=meta.get('scanner'),
+                )
+                processed += 1
+                w = meta.get('width_px')
+                h = meta.get('height_px')
+                mag = meta.get('magnification')
+                print(f'  OK   {slide_id}: {w}x{h} @ {mag}x')
+            except Exception as e:
+                print(f'  ERR  {slide_id}: {e}', file=sys.stderr)
+                errors += 1
+
+        print(f'\nMetadata backfill complete: {processed} processed, {skipped} skipped, {errors} errors')
+        return 1 if errors else 0
+
+    return 0
+
+
 def main() -> int:
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
@@ -106,6 +243,46 @@ Examples:
         help='Disable Swagger/OpenAPI documentation',
     )
     parser.add_argument(
+        '--db-url',
+        type=str,
+        default=None,
+        help='PostgreSQL connection URL for WSI metadata '
+        '(e.g., postgresql://user:pass@host:port/db)',
+    )
+    parser.add_argument(
+        '--clinical-root',
+        type=Path,
+        default=None,
+        help='Filesystem root for clinical slide collection '
+        '(prepended to slides.relative_path from database)',
+    )
+    parser.add_argument(
+        '--hmac-key',
+        type=str,
+        default=None,
+        help='Secret key for HMAC-SHA256 integrity verification '
+        '(prefer env var LARGE_IMAGE_SERVER_HMAC_KEY)',
+    )
+    parser.add_argument(
+        '--backfill-hmac',
+        action='store_true',
+        help='Compute HMACs for slides with NULL hmac, print summary, and exit '
+        '(requires --db-url, --clinical-root, --hmac-key)',
+    )
+    parser.add_argument(
+        '--verify-all',
+        action='store_true',
+        help='Verify all slides by recomputing HMACs, print summary, and exit '
+        '(requires --db-url, --clinical-root, --hmac-key)',
+    )
+    parser.add_argument(
+        '--backfill-metadata',
+        action='store_true',
+        help='Extract image metadata (dimensions, magnification, mpp) from slide files '
+        'for slides with NULL width_px, print summary, and exit '
+        '(requires --db-url, --clinical-root)',
+    )
+    parser.add_argument(
         '--version',
         '-v',
         action='store_true',
@@ -120,38 +297,64 @@ Examples:
         print(f'large-image-server {__version__}')
         return 0
 
-    # Validate image directory
-    if not args.image_dir.exists():
-        print(f'Error: Image directory does not exist: {args.image_dir}', file=sys.stderr)
-        return 1
+    # Validate image directory (not required when using --db-url with --clinical-root)
+    if not args.db_url:
+        if not args.image_dir.exists():
+            print(f'Error: Image directory does not exist: {args.image_dir}', file=sys.stderr)
+            return 1
+        if not args.image_dir.is_dir():
+            print(f'Error: Not a directory: {args.image_dir}', file=sys.stderr)
+            return 1
 
-    if not args.image_dir.is_dir():
-        print(f'Error: Not a directory: {args.image_dir}', file=sys.stderr)
+    # Validate clinical-root if provided
+    if args.clinical_root and not args.clinical_root.is_dir():
+        print(f'Error: Clinical root is not a directory: {args.clinical_root}', file=sys.stderr)
         return 1
 
     # Configure settings
     from .config import configure_settings
 
-    configure_settings(
-        image_dir=args.image_dir.resolve(),
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-        workers=args.workers,
-        cache_backend=args.cache_backend,
-        source_cache_size=args.source_cache_size,
-        jpeg_quality=args.jpeg_quality,
-        default_encoding=args.default_encoding,
-        api_prefix=args.api_prefix,
-        cors_enabled=not args.no_cors,
-        docs_enabled=not args.no_docs,
-    )
+    config_kwargs = {
+        'image_dir': args.image_dir.resolve(),
+        'host': args.host,
+        'port': args.port,
+        'reload': args.reload,
+        'workers': args.workers,
+        'cache_backend': args.cache_backend,
+        'source_cache_size': args.source_cache_size,
+        'jpeg_quality': args.jpeg_quality,
+        'default_encoding': args.default_encoding,
+        'api_prefix': args.api_prefix,
+        'cors_enabled': not args.no_cors,
+        'docs_enabled': not args.no_docs,
+    }
+
+    if args.db_url:
+        config_kwargs['storage_db_url'] = args.db_url
+    if args.clinical_root:
+        config_kwargs['storage_clinical_root'] = args.clinical_root.resolve()
+    if args.hmac_key:
+        config_kwargs['hmac_key'] = args.hmac_key
+
+    configure_settings(**config_kwargs)
+
+    # Handle offline commands (mutually exclusive with server startup)
+    if args.backfill_hmac or args.verify_all or args.backfill_metadata:
+        return _run_offline_command(args)
 
     # Create and run the app
     from . import create_app
 
-    print(f'Starting Large Image Server...')
+    print('Starting Large Image Server...')
     print(f'  Image directory: {args.image_dir.resolve()}')
+    if args.db_url:
+        # Mask password in URL for display
+        display_url = args.db_url.split('@')[-1] if '@' in args.db_url else args.db_url
+        print(f'  Database: ...@{display_url}')
+    if args.clinical_root:
+        print(f'  Clinical root: {args.clinical_root.resolve()}')
+    if config_kwargs.get('hmac_key'):
+        print('  HMAC: configured')
     print(f'  Server: http://{args.host}:{args.port}')
     print(f'  API docs: http://{args.host}:{args.port}/docs')
     print()

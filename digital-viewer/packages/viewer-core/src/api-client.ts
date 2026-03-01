@@ -274,16 +274,9 @@ export class TileServerClient {
     return this.fetch<WorklistItem[]>(`/worklist${query ? `?${query}` : ''}`);
   }
 
-  /** Search cases by ID or patient name */
+  /** Search cases by case ID (server-side) */
   async searchCases(query: string): Promise<CaseSummary[]> {
-    const cases = await this.getCases();
-    const lowerQuery = query.toLowerCase();
-    return cases.filter(
-      (c) =>
-        c.caseId.toLowerCase().includes(lowerQuery) ||
-        c.patientName.toLowerCase().includes(lowerQuery) ||
-        c.patientId.toLowerCase().includes(lowerQuery)
-    );
+    return this.fetch<CaseSummary[]>(`/cases/search?q=${encodeURIComponent(query)}`);
   }
 
   // ============ Slide Endpoints ============

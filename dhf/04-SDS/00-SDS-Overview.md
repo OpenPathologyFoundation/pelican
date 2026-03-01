@@ -120,6 +120,7 @@ This document provides the high-level architectural overview of the Digital View
 | Voice Processor | Web Audio API | Voice capture, transcription | Phase 2 |
 | Tier 1 Store | IndexedDB/Memory | Ephemeral session data | SDS-TEL-001 |
 | Session Awareness Service | Node.js/WebSocket | Multi-context coordination | SDS-FDP-001 |
+| OrchestratorBridge | TypeScript | Orchestrator comms, JWT, degradation | SDS-OVI-001 (Okapi DHF) |
 | Tile Server | Python/large_image | Image tile serving | External |
 | Annotation Service | PostgreSQL/PostGIS | Annotation persistence | SDS-ANN-001 |
 
@@ -187,6 +188,7 @@ All components MUST:
 | SDS-FDP-001 | [02-FDP-Architecture.md](./02-FDP-Architecture.md) | Focus Declaration Protocol |
 | SDS-ANN-001 | [03-Annotation-Architecture.md](./03-Annotation-Architecture.md) | Annotation system |
 | SDS-TEL-001 | [04-Telemetry-Architecture.md](./04-Telemetry-Architecture.md) | Telemetry governance |
+| SDS-OVI-001 | Okapi DHF: `04-SDS/06-OVI-Architecture.md` | Orchestrator-Viewer Integration (cross-repo) |
 
 ## 7. Traceability to Requirements
 
@@ -198,6 +200,7 @@ All components MUST:
 | Session Service | SYS-SES-001 through SYS-SES-005 |
 | Annotation Manager | SYS-ANN-001 through SYS-ANN-010 |
 | Tier 1 Store | SYS-TEL-001 through SYS-TEL-005, SYS-RVW-003 through SYS-RVW-005 |
+| OrchestratorBridge | SYS-BRG-001 through SYS-BRG-010 |
 
 ## 8. Revision History
 

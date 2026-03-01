@@ -5,9 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
+from .. import db
 from ..config import get_settings
 from ..source_manager import SourceManager, get_source_manager
 
@@ -130,6 +131,30 @@ def _get_slide_by_id(slide_id: str) -> tuple[dict[str, Any], dict[str, Any]] | N
     return None
 
 
+def _resolve_slide_image_path(slide_id: str) -> str | None:
+    """Resolve the image path for a slide, using DB or JSON as appropriate.
+
+    When DB is configured, uses slide_id directly (SourceManager resolves via DB).
+    When using JSON, builds case_id/filename path.
+
+    Returns:
+        Image path string suitable for SourceManager, or None if slide not found.
+    """
+    if db.is_configured():
+        slide_row = db.get_slide_by_id(slide_id)
+        if slide_row is None:
+            return None
+        # Return the slide_id — SourceManager._resolve_image_path will
+        # look it up in the DB and resolve to clinical_root/relative_path
+        return slide_id
+
+    result = _get_slide_by_id(slide_id)
+    if result is None:
+        return None
+    case, slide = result
+    return _get_slide_image_path(case, slide)
+
+
 @router.get(
     '/cases',
     summary='List all cases',
@@ -141,6 +166,9 @@ async def list_cases() -> list[dict[str, Any]]:
     Returns:
         List of cases with basic info (no slides detail).
     """
+    if db.is_configured():
+        return db.list_cases()
+
     data = _load_cases()
     cases = []
 
@@ -161,6 +189,46 @@ async def list_cases() -> list[dict[str, Any]]:
 
 
 @router.get(
+    '/cases/search',
+    summary='Search cases by case ID',
+    description='Search cases by case ID substring match.',
+)
+async def search_cases(
+    q: str = Query(..., min_length=1),
+) -> list[dict[str, Any]]:
+    """Search cases by case ID.
+
+    Args:
+        q: Search query (matched against case ID, case-insensitive).
+
+    Returns:
+        List of matching cases (max 20).
+    """
+    if db.is_configured():
+        return db.search_cases(q)
+
+    data = _load_cases()
+    lower_q = q.lower()
+    results = []
+    for case in data.get('cases', []):
+        if lower_q in case.get('caseId', '').lower():
+            results.append({
+                'caseId': case.get('caseId'),
+                'patientName': case.get('patientName'),
+                'patientId': case.get('patientId'),
+                'accessionDate': case.get('accessionDate'),
+                'diagnosis': case.get('diagnosis'),
+                'specimenType': case.get('specimenType'),
+                'status': case.get('status'),
+                'priority': case.get('priority'),
+                'slideCount': len(case.get('slides', [])),
+            })
+            if len(results) >= 20:
+                break
+    return results
+
+
+@router.get(
     '/cases/{case_id}',
     summary='Get case details',
     description='Get full details for a specific case including all slides.',
@@ -175,6 +243,12 @@ async def get_case(case_id: str) -> dict[str, Any]:
     Returns:
         Complete case information including all slides.
     """
+    if db.is_configured():
+        case = db.get_case(case_id)
+        if case is None:
+            raise HTTPException(status_code=404, detail=f'Case not found: {case_id}')
+        return case
+
     case = _get_case_by_id(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail=f'Case not found: {case_id}')
@@ -197,6 +271,12 @@ async def get_case_slides(case_id: str) -> list[dict[str, Any]]:
     Returns:
         List of slides in the case.
     """
+    if db.is_configured():
+        slides = db.get_case_slides(case_id)
+        if slides is None:
+            raise HTTPException(status_code=404, detail=f'Case not found: {case_id}')
+        return slides
+
     case = _get_case_by_id(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail=f'Case not found: {case_id}')
@@ -219,6 +299,12 @@ async def get_slide(slide_id: str) -> dict[str, Any]:
     Returns:
         Slide information with case context.
     """
+    if db.is_configured():
+        slide = db.get_slide_with_context(slide_id)
+        if slide is None:
+            raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
+        return slide
+
     result = _get_slide_by_id(slide_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
@@ -256,6 +342,22 @@ async def get_slide_file_path(
     Returns:
         File path information.
     """
+    if db.is_configured():
+        slide_row = db.get_slide_by_id(slide_id)
+        if slide_row is None:
+            raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
+        image_path = slide_row['relative_path']
+        try:
+            # source_manager will resolve via DB path (slide_id lookup)
+            resolved = source_manager.get_source_path(slide_id)
+            return {
+                'slideId': slide_id,
+                'imagePath': image_path,
+                'resolvedPath': str(resolved),
+            }
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
     result = _get_slide_by_id(slide_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
@@ -304,12 +406,9 @@ async def get_slide_label(
     Returns:
         Label image (PNG or JPEG).
     """
-    result = _get_slide_by_id(slide_id)
-    if result is None:
+    image_path = _resolve_slide_image_path(slide_id)
+    if image_path is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
-
-    case, slide = result
-    image_path = _get_slide_image_path(case, slide)
 
     # Try to extract embedded label from source file
     try:
@@ -363,12 +462,9 @@ async def get_slide_macro(
     Returns:
         Macro image (PNG or JPEG).
     """
-    result = _get_slide_by_id(slide_id)
-    if result is None:
+    image_path = _resolve_slide_image_path(slide_id)
+    if image_path is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
-
-    case, slide = result
-    image_path = _get_slide_image_path(case, slide)
 
     # Try to extract embedded macro from source file
     try:
@@ -423,12 +519,9 @@ async def get_slide_thumbnail(
     Returns:
         Thumbnail image (PNG or JPEG).
     """
-    result = _get_slide_by_id(slide_id)
-    if result is None:
+    image_path = _resolve_slide_image_path(slide_id)
+    if image_path is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
-
-    case, slide = result
-    image_path = _get_slide_image_path(case, slide)
 
     try:
         source = source_manager.get_source(image_path)
@@ -486,12 +579,9 @@ async def list_slide_associated_images(
     Returns:
         Dictionary with available images and their sources.
     """
-    result = _get_slide_by_id(slide_id)
-    if result is None:
+    image_path = _resolve_slide_image_path(slide_id)
+    if image_path is None:
         raise HTTPException(status_code=404, detail=f'Slide not found: {slide_id}')
-
-    case, slide = result
-    image_path = _get_slide_image_path(case, slide)
 
     # Check what's embedded in the source file
     embedded = []
@@ -536,6 +626,9 @@ async def get_worklist(
     Returns:
         List of cases matching the filters.
     """
+    if db.is_configured():
+        return db.get_worklist_cases(status=status, priority=priority)
+
     data = _load_cases()
     worklist = []
 
@@ -606,44 +699,61 @@ async def warm_sources(
     """
     import time
 
-    data = _load_cases()
-
     results = {'warmed': [], 'failed': [], 'skipped': []}
 
-    for case in data.get('cases', []):
-        if case_id and case.get('caseId') != case_id:
+    # Gather slides to warm from DB or JSON
+    slides_to_warm = []
+    if db.is_configured():
+        cases = db.list_cases()
+        for case in cases:
+            if case_id and case.get('caseId') != case_id:
+                continue
+            case_slides = db.get_case_slides(case['caseId']) or []
+            for slide in case_slides:
+                slides_to_warm.append({
+                    'slideId': slide.get('slideId'),
+                    'filename': slide.get('filename', ''),
+                    'imagePath': slide.get('slideId'),  # SourceManager resolves via DB
+                })
+    else:
+        data = _load_cases()
+        for case in data.get('cases', []):
+            if case_id and case.get('caseId') != case_id:
+                continue
+            for slide in case.get('slides', []):
+                slides_to_warm.append({
+                    'slideId': slide.get('slideId'),
+                    'filename': slide.get('filename', ''),
+                    'imagePath': f"{case.get('caseId')}/{slide.get('filename')}",
+                })
+
+    for entry in slides_to_warm:
+        filename = entry['filename']
+        ext = '.' + filename.split('.')[-1].lower() if '.' in filename else ''
+
+        if not all_sources and ext not in SLOW_EXTENSIONS:
+            results['skipped'].append({
+                'slideId': entry['slideId'],
+                'reason': f'extension {ext} not in warm list',
+            })
             continue
 
-        for slide in case.get('slides', []):
-            filename = slide.get('filename', '')
-            ext = '.' + filename.split('.')[-1].lower() if '.' in filename else ''
+        try:
+            start = time.time()
+            source_manager.get_source(entry['imagePath'])
+            elapsed = time.time() - start
 
-            # Check if we should warm this file
-            if not all_sources and ext not in SLOW_EXTENSIONS:
-                results['skipped'].append({
-                    'slideId': slide.get('slideId'),
-                    'reason': f'extension {ext} not in warm list',
-                })
-                continue
-
-            image_path = f"{case.get('caseId')}/{filename}"
-
-            try:
-                start = time.time()
-                source_manager.get_source(image_path)
-                elapsed = time.time() - start
-
-                results['warmed'].append({
-                    'slideId': slide.get('slideId'),
-                    'path': image_path,
-                    'time_seconds': round(elapsed, 2),
-                })
-            except Exception as e:
-                results['failed'].append({
-                    'slideId': slide.get('slideId'),
-                    'path': image_path,
-                    'error': str(e),
-                })
+            results['warmed'].append({
+                'slideId': entry['slideId'],
+                'path': entry['imagePath'],
+                'time_seconds': round(elapsed, 2),
+            })
+        except Exception as e:
+            results['failed'].append({
+                'slideId': entry['slideId'],
+                'path': entry['imagePath'],
+                'error': str(e),
+            })
 
     return {
         'summary': {

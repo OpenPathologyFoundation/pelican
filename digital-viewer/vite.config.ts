@@ -1,7 +1,14 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { resolve } from 'path';
+
+// When served behind the nginx reverse proxy at /viewer/, set VITE_BASE=/viewer/
+// so that Vite serves assets under /viewer/ and rewrites injected paths (e.g.
+// /@vite/client → /viewer/@vite/client). In standalone mode, omit the variable.
+const base = process.env.VITE_BASE || '/';
 
 export default defineConfig({
+  base,
   plugins: [svelte()],
   server: {
     port: 5173,
@@ -12,6 +19,14 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        orchestrated: resolve(__dirname, 'orchestrated.html'),
       },
     },
   },

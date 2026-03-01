@@ -11,6 +11,7 @@
   import { TileSourceFactory } from '../tile-source';
   import { createTilePrefetcher, type TilePrefetchConfig } from '../tile-prefetcher';
   import { createTileFailureTracker, type TileFailureConfig } from '../tile-failure-tracker';
+  import { get } from 'svelte/store';
   import {
     viewerConfig,
     slideMetadata,
@@ -22,7 +23,11 @@
     osdViewer,
     viewerSize,
     tileFailureState,
+    authToken,
+    authExpired,
+    orchestratorState,
   } from '../stores';
+  import ErrorOverlay from './ErrorOverlay.svelte';
   import type {
     ViewerConfig,
     ViewportState,
@@ -98,9 +103,20 @@
 
     const currentConfig = { ...$viewerConfig, ...config };
 
+    // Build initial ajax headers if we have an auth token (SRS SYS-INT-002)
+    const currentToken = get(authToken);
+    const initialAjaxHeaders: Record<string, string> = {};
+    if (currentToken) {
+      initialAjaxHeaders['Authorization'] = `Bearer ${currentToken}`;
+    }
+
     viewer = OpenSeadragon({
       element: containerEl,
       prefixUrl: 'https://cdn.jsdelivr.net/npm/openseadragon@5.0/build/openseadragon/images/',
+
+      // Authentication: Use XHR for tile requests so we can attach Bearer token
+      loadTilesWithAjax: true,
+      ajaxHeaders: initialAjaxHeaders,
 
       // Navigator
       showNavigator: currentConfig.showNavigator,
@@ -141,8 +157,11 @@
       },
     });
 
-    // Create tile source factory
+    // Create tile source factory and sync auth token
     tileSourceFactory = new TileSourceFactory(currentConfig);
+    if (currentToken) {
+      tileSourceFactory.setAccessToken(currentToken);
+    }
 
     // Set up event handlers
     viewer.addHandler('open', () => {
@@ -390,6 +409,25 @@
       viewerConfig.update((c) => ({ ...c, ...config }));
     }
   });
+
+  /** Effect: Update OSD ajax headers when auth token changes (SRS SYS-INT-002) */
+  $effect(() => {
+    const token = $authToken;
+    if (viewer) {
+      if (token) {
+        // Update OSD headers for all subsequent tile requests
+        (viewer as any).ajaxHeaders = { Authorization: `Bearer ${token}` };
+        // Clear auth expired state since we have a fresh token
+        authExpired.set(false);
+      } else {
+        (viewer as any).ajaxHeaders = {};
+      }
+    }
+    // Also update the tile source factory for metadata fetches
+    if (tileSourceFactory) {
+      tileSourceFactory.setAccessToken(token);
+    }
+  });
 </script>
 
 <div class="viewer-container" bind:this={containerEl}>
@@ -405,6 +443,22 @@
       <span class="error-icon">⚠</span>
       <span>{$viewerError}</span>
     </div>
+  {/if}
+
+  <!-- Lifecycle & error overlays (priority order) -->
+  {#if $orchestratorState === 'ended'}
+    <ErrorOverlay type="auth-expired" message="Session ended by workstation" />
+  {:else if $orchestratorState === 'lost'}
+    <ErrorOverlay type="service-unavailable" message="Connection to workstation lost" />
+  {:else if $orchestratorState === 'disconnected'}
+    <div class="reconnecting-banner">
+      <span class="reconnecting-dot"></span>
+      Reconnecting to workstation...
+    </div>
+  {:else if $authExpired}
+    <ErrorOverlay type="auth-expired" />
+  {:else if $tileFailureState.thresholdExceeded}
+    <ErrorOverlay type="tile-failure" />
   {/if}
 </div>
 
@@ -461,6 +515,39 @@
 
   .error-icon {
     font-size: 1.5rem;
+  }
+
+  /* Reconnecting banner (orchestrator temporarily disconnected) */
+  .reconnecting-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(234, 179, 8, 0.15);
+    border-bottom: 1px solid rgba(234, 179, 8, 0.3);
+    color: #eab308;
+    font-size: 0.85rem;
+    font-weight: 500;
+    backdrop-filter: blur(4px);
+  }
+
+  .reconnecting-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #eab308;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 
   /* OpenSeadragon navigator styling */

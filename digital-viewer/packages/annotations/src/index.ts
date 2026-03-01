@@ -74,3 +74,15 @@ export {
   DEFAULT_STYLES,
   PATHOLOGY_CLASSIFICATIONS,
 } from './types';
+
+// Persistence
+export type {
+  AnnotationPersistenceProvider,
+  SaveResult,
+  AnnotationQuery,
+} from './persistence';
+
+export {
+  LocalAnnotationProvider,
+  OrchestratorAnnotationProvider,
+} from './persistence';

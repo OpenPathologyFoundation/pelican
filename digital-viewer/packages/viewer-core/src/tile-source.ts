@@ -10,10 +10,15 @@ import type { SlideMetadata, TileSourceConfig, ViewerConfig } from './types';
 /** Fetch slide metadata from large_image server */
 export async function fetchSlideMetadata(
   tileServerUrl: string,
-  slideId: string
+  slideId: string,
+  accessToken?: string | null
 ): Promise<SlideMetadata> {
   // URL-encode the slideId to handle paths with slashes
-  const response = await fetch(`${tileServerUrl}/metadata/${encodeURIComponent(slideId)}`);
+  const headers: HeadersInit = {};
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+  const response = await fetch(`${tileServerUrl}/metadata/${encodeURIComponent(slideId)}`, { headers });
   if (!response.ok) {
     throw new Error(`Failed to fetch metadata: ${response.statusText}`);
   }
@@ -115,10 +120,21 @@ export function createIIIFTileSource(baseUrl: string): string {
 /** Tile source factory */
 export class TileSourceFactory {
   private config: ViewerConfig;
+  private accessToken: string | null = null;
   private metadataCache: Map<string, SlideMetadata> = new Map();
 
   constructor(config: ViewerConfig) {
     this.config = config;
+  }
+
+  /** Set the access token for authenticated requests (SRS SYS-INT-002) */
+  setAccessToken(token: string | null): void {
+    this.accessToken = token;
+  }
+
+  /** Get the current access token */
+  getAccessToken(): string | null {
+    return this.accessToken;
   }
 
   /** Create tile source for a slide */
@@ -129,7 +145,7 @@ export class TileSourceFactory {
     // Fetch metadata if not cached
     let metadata = this.metadataCache.get(slideId);
     if (!metadata) {
-      metadata = await fetchSlideMetadata(this.config.tileServerUrl, slideId);
+      metadata = await fetchSlideMetadata(this.config.tileServerUrl, slideId, this.accessToken);
       this.metadataCache.set(slideId, metadata);
     }
 

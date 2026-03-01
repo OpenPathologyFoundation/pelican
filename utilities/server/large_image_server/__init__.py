@@ -30,6 +30,7 @@ from .auth import CurrentUser, JWTPayload, jwt_bearer
 from .config import ServerSettings, configure_settings, get_settings
 from .models import HealthResponse
 from .routes import api_router
+from .routes.ingest import router as ingest_router
 from .source_manager import SourceManager, configure_source_manager, get_source_manager
 
 __all__ = [
@@ -117,6 +118,9 @@ def create_app(
 
     # Include API routes
     app.include_router(api_router, prefix=settings.api_prefix)
+
+    # Include admin routes (not behind JWT — admin auth handled separately)
+    app.include_router(ingest_router)
 
     # Health check endpoint
     @app.get('/health', response_model=HealthResponse, tags=['Health'])

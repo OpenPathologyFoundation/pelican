@@ -45,6 +45,7 @@ setup(
         'uvicorn[standard]>=0.27',
         'pydantic>=2.5',
         'pydantic-settings>=2.1',
+        'python-multipart>=0.0.6',
     ],
     extras_require={
         'common': [
@@ -64,6 +65,10 @@ setup(
         ],
         'jwt': [
             'PyJWT>=2.8',
+        ],
+        'db': [
+            'psycopg[binary]>=3.1',
+            'psycopg_pool>=3.1',
         ],
         'test': [
             'pytest>=7.0',

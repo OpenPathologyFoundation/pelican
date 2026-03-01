@@ -3,7 +3,7 @@
 ---
 document_id: VVP-001
 title: Digital Viewer Module — Verification & Validation Plan
-version: 1.1
+version: 1.3
 status: ACTIVE
 owner: Quality Assurance
 created_date: 2026-01-21
@@ -75,6 +75,9 @@ This document defines the verification and validation strategy for the Digital V
 | TEST-UI-005 | SYS-UI-005 | Open side-by-side comparison (Phase 3) | Two slides visible simultaneously | ☐ |
 | TEST-UI-006 | SYS-UI-006 | Open viewer on dual-monitor setup | Case Context on M1, Viewer on M2 | ☐ |
 | TEST-UI-007 | SYS-UI-007 | Open viewer on single monitor | Reduced-functionality mode works | ☐ |
+| TEST-UI-008 | SYS-UI-011 | Hover over slide in gallery for 2+ seconds | Label preview appears after delay | ☐ |
+| TEST-UI-009 | SYS-UI-012 | Click info button on slide item | Modal with label/macro opens | ☐ |
+| TEST-UI-010 | SYS-UI-013 | Verify modal content | Label and macro images displayed | ☐ |
 
 ### 4.3 Focus Declaration Protocol (SYS-FDP-*)
 
@@ -195,6 +198,32 @@ This document defines the verification and validation strategy for the Digital V
 | TEST-IMS-017 | SYS-IMS-017 | Request image list | JSON array of images | ☐ |
 | TEST-IMS-018 | SYS-IMS-018 | Request health endpoint | 200 OK response | ☐ |
 
+### 4.18 Image Management Service — Associated Images Fallback (SYS-IMS-039 to SYS-IMS-045)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-IMS-039 | SYS-IMS-039 | Request label via /slides/{id}/label | Label image returned | ☐ |
+| TEST-IMS-040 | SYS-IMS-040 | Request macro via /slides/{id}/macro | Macro image or 404 | ☐ |
+| TEST-IMS-041 | SYS-IMS-041 | Request thumbnail via /slides/{id}/thumbnail | Thumbnail image returned | ☐ |
+| TEST-IMS-042 | SYS-IMS-042 | Request /slides/{id}/associated | JSON with availability info | ☐ |
+| TEST-IMS-043 | SYS-IMS-043 | Request label for slide without embedded label | Generated placeholder returned | ☐ |
+| TEST-IMS-044 | SYS-IMS-044 | Request thumbnail for slide without embedded thumbnail | Pyramid-extracted thumbnail returned | ☐ |
+| TEST-IMS-045 | SYS-IMS-045 | Verify source field in associated info | "embedded" or "generated" reported | ☐ |
+
+### 4.19 Image Management Service — Color Fidelity (SYS-IMS-046 to SYS-IMS-047)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-IMS-046 | SYS-IMS-046 | Request tile; compare pixel values to source | Colors match source file (no ICC shift) | ☐ |
+| TEST-IMS-047 | SYS-IMS-047 | Request tiles from image with ICC profile | Original pixel values preserved | ☐ |
+
+### 4.20 Image Management Service — Image Conversion (SYS-IMS-048 to SYS-IMS-049)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-IMS-048 | SYS-IMS-048 | Convert DICOM to TIFF; check metadata | Resolution/MPP preserved in output | ☐ |
+| TEST-IMS-049 | SYS-IMS-049 | Convert DICOM to TIFF; compare pixel colors | Colors match within tolerance (no corruption) | ☐ |
+
 ### 4.13 Image Management Service — Encoding and Generation (SYS-IMS-019 to SYS-IMS-022)
 
 | Test ID | Requirement | Test Description | Pass Criteria | Status |
@@ -240,7 +269,7 @@ This document defines the verification and validation strategy for the Digital V
 | TEST-IMS-037 | SYS-IMS-037 | Access /docs endpoint | OpenAPI documentation rendered | ☐ |
 | TEST-IMS-038 | SYS-IMS-038 | Deploy container and verify | Server starts; health check passes | ☐ |
 
-### 4.18 Image Management Service — Security (SC-023 to SC-030)
+### 4.21 Image Management Service — Security (SC-023 to SC-030)
 
 | Test ID | Requirement | Test Description | Pass Criteria | Status |
 |:--------|:------------|:-----------------|:--------------|:-------|
@@ -250,6 +279,42 @@ This document defines the verification and validation strategy for the Digital V
 | TEST-SEC-026 | SC-026 | Exceed source cache limit | LRU eviction occurs | ☐ |
 | TEST-SEC-028 | SC-028 | Request via HTTP | Redirect to HTTPS or rejected | ☐ |
 | TEST-SEC-030 | SC-030 | Request from disallowed origin | CORS blocked | ☐ |
+
+### 4.22 Orchestrator Bridge Resilience (SYS-BRG-*)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-BRG-001 | SYS-BRG-001 | Simulate bridge disconnection during active viewing; verify viewer continues rendering | Tiles continue to display; pan/zoom functional; no crash or blank screen | ☐ |
+| TEST-BRG-002 | SYS-BRG-002 | Simulate bridge disconnection; verify viewer operates with last valid JWT for API calls | Annotation save succeeds; tile requests succeed until JWT expires | ☐ |
+| TEST-BRG-003 | SYS-BRG-003 | Simulate bridge degradation; inspect viewer UI | Amber indicator (≤24px height) visible in viewer header area | ☐ |
+| TEST-BRG-004 | SYS-BRG-004 | Compare viewer UI in degraded vs fully disconnected states | Distinct visual indicators for DEGRADED (amber) vs DISCONNECTED (red/grey) | ☐ |
+| TEST-BRG-005 | SYS-BRG-005 | Disconnect bridge; restore with matching case context | Silent resync; no user prompt; degradation indicator clears | ☐ |
+| TEST-BRG-006 | SYS-BRG-006 | Disconnect bridge; restore with different case context | User confirmation prompt appears before any case switch | ☐ |
+| TEST-BRG-007 | SYS-BRG-007 | Allow JWT to expire during bridge outage; verify viewer behavior | Non-blocking banner with guidance; no abrupt closure; cached tiles remain viewable | ☐ |
+| TEST-BRG-008 | SYS-BRG-008 | Inspect viewer code and runtime for localStorage/sessionStorage JWT usage | No JWT or authentication data found in any browser storage API | ☐ |
+| TEST-BRG-009 | SYS-BRG-009 | Disconnect Session Awareness Service; verify FDP Layer 1 | Focus declaration banner, persistent header, and DX mode all function without Layer 2 | ☐ |
+| TEST-BRG-010 | SYS-BRG-010 | Disconnect Session Awareness Service; verify viewer degradation | Session service features gracefully disabled; no crash; reconnection attempted | ☐ |
+
+### 4.23 WSI Image Integrity (SDS-STR-001 §5, SC-034 to SC-037)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-INT-001 | SC-034 | Ingest a slide; verify HMAC-SHA256 is computed and stored in `slides.hmac` | 64-character hex digest present in database | ☐ |
+| TEST-INT-002 | SC-034 | Modify a stored slide file (flip one byte); run integrity verification | Mismatch detected; alert generated with slide ID, expected vs actual hash | ☐ |
+| TEST-INT-003 | SC-035 | Inspect storage volume for sidecar hash files | No `.sha256`, `.hmac`, or similar sidecar files alongside images | ☐ |
+| TEST-INT-004 | SC-036 | Run background integrity sweep on test dataset | All unmodified slides pass; `verified_at` timestamp updated | ☐ |
+| TEST-INT-005 | SC-036 | Run background sweep with one corrupted file | Corrupted file flagged; file size delta reported; other slides pass | ☐ |
+| TEST-INT-006 | SC-037 | Inspect tile server configuration for HMAC key provisioning | Key loaded from environment variable only; not present in DB, VCS, or storage volume | ☐ |
+| TEST-INT-007 | SC-034 | Verify HMAC with correct key; then verify with wrong key | Correct key: match; wrong key: mismatch (proves keyed MAC, not bare hash) | ☐ |
+
+### 4.24 Bridge Security Controls (SC-031 to SC-033, SC-038)
+
+| Test ID | Requirement | Test Description | Pass Criteria | Status |
+|:--------|:------------|:-----------------|:--------------|:-------|
+| TEST-SEC-031 | SC-031 | Send postMessage from unauthorized origin to viewer window | Message silently dropped; no state change in viewer | ☐ |
+| TEST-SEC-032 | SC-032 | Send malformed message (wrong type, missing fields) to viewer | Message rejected; no state change; no crash | ☐ |
+| TEST-SEC-033 | SC-033 | Inspect all postMessage payloads during case lifecycle | JWT transmitted only via dedicated JWT_REFRESH message type; no credentials in URL params | ☐ |
+| TEST-SEC-038 | SC-038 | Close viewer window; inspect JavaScript heap/closure state | JWT variable cleared; no residual token accessible after close | ☐ |
 
 ## 5. Risk Control Verification
 
@@ -280,6 +345,20 @@ This document defines the verification and validation strategy for the Digital V
 | RC-011-B (Unsupported error) | TEST-ERR-001 | ☐ |
 | RC-012-A (ID validation) | TEST-SEC-023 | ☐ |
 | RC-012-B (Traversal rejection) | TEST-SEC-024 | ☐ |
+| RC-013-A (Color fidelity - no ICC) | TEST-IMS-046, TEST-IMS-047 | ☐ |
+| RC-013-B (Conversion color preservation) | TEST-IMS-049 | ☐ |
+| RC-014-A (Independent case context) | TEST-BRG-001, TEST-BRG-002 | ☐ |
+| RC-014-B (Reconnect validates context) | TEST-BRG-005, TEST-BRG-006 | ☐ |
+| RC-014-C (FDP header shows viewer case) | TEST-BRG-009 | ☐ |
+| RC-014-D (Case switch ACK/timeout) | TEST-BRG-006 | ☐ |
+| RC-015-A (JWT 30-min lifetime) | TEST-BRG-002, TEST-BRG-007 | ☐ |
+| RC-015-B (Proactive JWT refresh) | TEST-BRG-002 | ☐ |
+| RC-015-C (Non-blocking expiry banner) | TEST-BRG-007 | ☐ |
+| RC-015-D (Cached tiles after expiry) | TEST-BRG-007 | ☐ |
+| RC-016-A (Popup detection) | TEST-OVI-002 (Okapi VVP) | ☐ |
+| RC-016-B (User guidance message) | TEST-OVI-002 (Okapi VVP) | ☐ |
+| RC-017-A (FDP Layer 1 independent) | TEST-BRG-009 | ☐ |
+| RC-017-B (Auto-reconnect backoff) | TEST-BRG-010 | ☐ |
 
 ## 6. Validation Plan
 
@@ -317,6 +396,8 @@ Each test execution produces:
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-21 | QA | Initial VVP |
 | 1.1 | 2026-01-22 | QA | Added Image Management Service test cases (TEST-IMS-001 to TEST-IMS-038, TEST-SEC-023 to TEST-SEC-030); updated risk control verification |
+| 1.2 | 2026-02-02 | QA | Added TEST-UI-008 to TEST-UI-010 (slide info UI), TEST-IMS-039 to TEST-IMS-049 (associated images, color fidelity, conversion); updated risk control verification |
+| 1.3 | 2026-02-28 | QA | Added TEST-BRG-001 to TEST-BRG-010 (bridge resilience), TEST-INT-001 to TEST-INT-007 (WSI integrity), TEST-SEC-031 to TEST-SEC-038 (bridge security); added RC-014 through RC-017 to risk control verification |
 
 ---
 

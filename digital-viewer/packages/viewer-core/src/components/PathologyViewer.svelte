@@ -22,6 +22,7 @@
     diagnosticMode,
     privacyMode,
     resetViewerState,
+    authToken,
   } from '../stores';
   import {
     trackCaseOpened,
@@ -82,6 +83,8 @@
   interface Props {
     /** Tile server URL */
     tileServerUrl?: string;
+    /** JWT access token for authenticated tile/API requests (SRS SYS-INT-002) */
+    accessToken?: string | null;
     /** Initial case ID to load */
     initialCaseId?: string | null;
     /** Initial slide ID to load */
@@ -110,6 +113,7 @@
 
   let {
     tileServerUrl = 'http://localhost:8000',
+    accessToken = null,
     initialCaseId = null,
     initialSlideId = null,
     enableDiagnosticMode = 'auto',
@@ -147,7 +151,18 @@
   let reviewEventUnsubscribe: (() => void) | null = null;
 
   /** Configure API client - use getter to capture prop value */
-  let client = $derived(configureApiClient({ baseUrl: tileServerUrl }));
+  let client = $derived(configureApiClient({
+    baseUrl: tileServerUrl,
+    accessToken: accessToken ?? undefined,
+  }));
+
+  /** Sync access token to global authToken store when prop changes (SRS SYS-INT-002) */
+  $effect(() => {
+    authToken.set(accessToken);
+    if (accessToken) {
+      client.setAccessToken(accessToken);
+    }
+  });
 
   /**
    * Determine if diagnostic mode should be enabled (SRS SYS-DXM-001)
@@ -402,20 +417,20 @@
     // Initialize review session (SYS-RVW-001) - this enables the Review tab
     initializeReviewSession();
 
-    // Initialize session service if configured
-    initializeSession().then(() => {
-      // Load initial case if provided (using initial source for DX mode determination)
-      if (initialCaseId) {
-        loadCase(initialCaseId, initialCaseSource).then(() => {
-          if (initialSlideId) {
-            const slide = slides.find((s) => s.slideId === initialSlideId);
-            if (slide) {
-              selectSlide(slide);
-            }
+    // Initialize session service in background (optional — must not block case loading)
+    initializeSession();
+
+    // Load initial case if provided (using initial source for DX mode determination)
+    if (initialCaseId) {
+      loadCase(initialCaseId, initialCaseSource).then(() => {
+        if (initialSlideId) {
+          const slide = slides.find((s) => s.slideId === initialSlideId);
+          if (slide) {
+            selectSlide(slide);
           }
-        });
-      }
-    });
+        }
+      });
+    }
   });
 
   onDestroy(() => {

@@ -165,6 +165,15 @@ export const visibleLayers: Readable<OverlayLayer[]> = derived(
   ($overlayLayers) => $overlayLayers.filter((l) => l.visible)
 );
 
+/** Authentication token for tile server requests (SRS SYS-INT-002) */
+export const authToken: Writable<string | null> = writable(null);
+
+/** Orchestrator connection state (for lifecycle overlays) */
+export const orchestratorState: Writable<'connected' | 'disconnected' | 'lost' | 'ended' | null> = writable(null);
+
+/** Auth expired flag (overrides tile failure UX with auth-specific message) */
+export const authExpired: Writable<boolean> = writable(false);
+
 /** Tile failure state (for error overlay) */
 export const tileFailureState: Writable<{
   thresholdExceeded: boolean;
@@ -193,4 +202,7 @@ export function resetViewerState(): void {
   activeDrawingTool.set(null);
   overlayLayers.set([]);
   tileFailureState.set({ thresholdExceeded: false, failureRate: 0 });
+  authExpired.set(false);
+  // Note: authToken and orchestratorState are NOT reset here —
+  // they persist across slide/case changes and are managed by the bridge
 }

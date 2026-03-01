@@ -7,7 +7,7 @@
    */
 
   import { getApiClient } from '../api-client';
-  import type { CaseSummary, WorklistItem } from '../api-client';
+  import type { CaseSummary } from '../api-client';
 
   /** Props */
   interface Props {
@@ -22,7 +22,7 @@
   let {
     oncaseselect,
     currentCaseId = null,
-    placeholder = 'Search by case ID or patient...',
+    placeholder = 'Search by case ID...',
   }: Props = $props();
 
   const client = getApiClient();
@@ -30,25 +30,10 @@
   /** State */
   let searchQuery = $state('');
   let searchResults = $state<CaseSummary[]>([]);
-  let worklist = $state<WorklistItem[]>([]);
   let isSearching = $state(false);
   let showDropdown = $state(false);
   let selectedIndex = $state(-1);
   let inputEl: HTMLInputElement | undefined = $state();
-
-  /** Load worklist on mount */
-  $effect(() => {
-    loadWorklist();
-  });
-
-  /** Load worklist */
-  async function loadWorklist(): Promise<void> {
-    try {
-      worklist = await client.getWorklist();
-    } catch (error) {
-      console.error('Failed to load worklist:', error);
-    }
-  }
 
   /** Search for cases */
   async function search(query: string): Promise<void> {
@@ -128,9 +113,7 @@
   }
 
   /** Computed: items to display in dropdown */
-  let displayItems = $derived(
-    searchQuery.length >= 2 ? searchResults : worklist.slice(0, 10)
-  );
+  let displayItems = $derived(searchResults);
 
   /** Get priority badge class */
   function getPriorityClass(priority: string): string {
@@ -168,10 +151,6 @@
 
   {#if showDropdown && displayItems.length > 0}
     <div class="case-search__dropdown">
-      {#if searchQuery.length < 2}
-        <div class="case-search__section-header">Worklist</div>
-      {/if}
-
       {#each displayItems as item, index}
         <button
           class="case-search__item"
