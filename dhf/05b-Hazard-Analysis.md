@@ -3,7 +3,7 @@
 ---
 document_id: RMF-001
 title: Digital Viewer Module — Hazard Analysis
-version: 1.1
+version: 1.3
 status: ACTIVE
 owner: Quality Assurance
 created_date: 2026-01-21
@@ -347,6 +347,139 @@ This document identifies hazards, analyzes foreseeable sequences of events leadi
 
 ---
 
+#### RISK-013: Color Inaccuracy Due to ICC Transformation
+
+| Element | Description |
+|:--------|:------------|
+| **Hazard** | Displayed slide colors differ from physical tissue appearance |
+| **Foreseeable Event** | ICC profile applied during tile serving; DICOM-to-TIFF conversion with color corruption |
+| **Hazardous Situation** | Pathologist interprets stain intensity or tissue color incorrectly |
+| **Harm** | Diagnostic error due to misinterpreted staining patterns |
+| **Severity** | 3 (Serious) |
+| **P1** | 1.0 |
+| **P2 (Pre-control)** | 3 (May cause harm) |
+| **Initial Risk** | 9 (Medium) |
+
+**Risk Controls**:
+| ID | Control | Type | Design Element |
+|:---|:--------|:-----|:---------------|
+| RC-013-A | Disable ICC profile application in tile serving | Inherent Safety | SYS-IMS-046, SYS-IMS-047 |
+| RC-013-B | Preserve color fidelity during image conversion | Inherent Safety | SYS-IMS-049 |
+| RC-013-C | Avoid JPEG color space corruption (no rgbjpeg flag) | Inherent Safety | Conversion pipeline |
+
+| P2 (Post-control) | Residual Risk | Acceptance |
+|:------------------|:--------------|:-----------|
+| 1 (Very unlikely) | 3 (Low) | ACCEPTABLE — ICC disabled; conversion validated; original pixel values preserved |
+
+---
+
+### 2.6 Orchestrator Bridge Hazards
+
+#### RISK-014: Bridge Failure During Case Switch
+
+| Element | Description |
+|:--------|:------------|
+| **Hazard** | Case switch message lost during bridge degradation |
+| **Foreseeable Event** | Pathologist clicks new case in worklist while bridge is temporarily disconnected (network glitch, orchestrator tab reload) |
+| **Hazardous Situation** | Orchestrator displays new case context; viewer still shows old case. Pathologist may document findings against the wrong patient. |
+| **Harm** | Case-image mismatch leading to wrong diagnosis |
+| **Severity** | 4 (Critical) |
+| **P1** | 1.0 |
+| **P2 (Pre-control)** | 3 (May cause harm — bridge drops are foreseeable in clinical environments) |
+| **Initial Risk** | 12 (High) — UNACCEPTABLE |
+
+**Risk Controls**:
+| ID | Control | Type | Design Element |
+|:---|:--------|:-----|:---------------|
+| RC-014-A | Viewer retains its own case context independently of the orchestrator; does not accept implicit case changes | Inherent Safety | SYS-BRG-001 |
+| RC-014-B | Bridge reconnect handshake validates case context match; mismatch requires explicit user confirmation | Protective | SYS-BRG-006 |
+| RC-014-C | FDP persistent header in viewer always shows the viewer's current case, regardless of orchestrator state | Information | SYS-BRG-009, SYS-FDP-006 |
+| RC-014-D | Case switch requires explicit ACK from viewer; timeout triggers orchestrator warning | Protective | SYS-OVI-011 |
+
+| P2 (Post-control) | Residual Risk | Acceptance |
+|:------------------|:--------------|:-----------|
+| 1 (Very unlikely) | 4 (Low) | ACCEPTABLE — Viewer independently maintains and displays case context; mismatch detected on reconnect; FDP header provides continuous identity verification |
+
+---
+
+#### RISK-015: Viewer JWT Expiry During Bridge Outage
+
+| Element | Description |
+|:--------|:------------|
+| **Hazard** | Authentication token expires while bridge is disconnected |
+| **Foreseeable Event** | Orchestrator tab closed or network partition exceeds JWT lifetime (30+ minutes) |
+| **Hazardous Situation** | Viewer cannot refresh tiles, save annotations, or persist review state |
+| **Harm** | Loss of diagnostic work (unsaved annotations); workflow disruption |
+| **Severity** | 2 (Minor) |
+| **P1** | 1.0 |
+| **P2 (Pre-control)** | 3 (May cause harm — extended outages during diagnosis are foreseeable) |
+| **Initial Risk** | 6 (Medium) |
+
+**Risk Controls**:
+| ID | Control | Type | Design Element |
+|:---|:--------|:-----|:---------------|
+| RC-015-A | JWT minimum lifetime of 30 minutes (sufficient for typical case examination) | Protective | SYS-OVI-012 |
+| RC-015-B | Proactive JWT refresh at 75% of lifetime when bridge is connected | Protective | SYS-OVI-013 |
+| RC-015-C | Non-blocking expiry banner with reconnection guidance (no abrupt close) | Information | SYS-BRG-007 |
+| RC-015-D | Cached tiles remain viewable after JWT expiry (read-only degradation) | Protective | SYS-BRG-007 |
+
+| P2 (Post-control) | Residual Risk | Acceptance |
+|:------------------|:--------------|:-----------|
+| 1 (Very unlikely) | 2 (Low) | ACCEPTABLE — 30-minute token covers most examinations; cached tiles provide read-only access; user warned before expiry |
+
+---
+
+#### RISK-016: Popup Blocker Prevents Viewer Launch
+
+| Element | Description |
+|:--------|:------------|
+| **Hazard** | Browser popup blocker prevents viewer window from opening |
+| **Foreseeable Event** | Hospital-managed browser with strict popup policies; first-time use without popup exception configured |
+| **Hazardous Situation** | Pathologist cannot view slides; no clear indication of why |
+| **Harm** | Workflow disruption; delayed diagnosis |
+| **Severity** | 2 (Minor) |
+| **P1** | 1.0 |
+| **P2 (Pre-control)** | 3 (May cause harm — popup blockers are common in enterprise environments) |
+| **Initial Risk** | 6 (Medium) |
+
+**Risk Controls**:
+| ID | Control | Type | Design Element |
+|:---|:--------|:-----|:---------------|
+| RC-016-A | Popup blocker detection within 3 seconds | Protective | SYS-OVI-002 |
+| RC-016-B | User-actionable message with instructions to allow popups for the application origin | Information | SYS-OVI-002 |
+
+| P2 (Post-control) | Residual Risk | Acceptance |
+|:------------------|:--------------|:-----------|
+| 2 (Unlikely) | 4 (Low) | ACCEPTABLE — Detection is immediate; clear user guidance provided; IT deployment can pre-configure popup exception |
+
+---
+
+#### RISK-017: Session Awareness Service Outage Masks Multi-Case Scenario
+
+| Element | Description |
+|:--------|:------------|
+| **Hazard** | Session Awareness Service unavailable; multi-case warning not generated |
+| **Foreseeable Event** | Service crash, deployment failure, network partition to WebSocket endpoint |
+| **Hazardous Situation** | Pathologist has cases open in multiple browsers/devices without awareness |
+| **Harm** | Increased risk of multi-context case confusion (RISK-002 compound) |
+| **Severity** | 4 (Critical) |
+| **P1** | 1.0 |
+| **P2 (Pre-control)** | 2 (Unlikely — requires both service outage AND multi-case scenario simultaneously) |
+| **Initial Risk** | 8 (Medium) |
+
+**Risk Controls**:
+| ID | Control | Type | Design Element |
+|:---|:--------|:-----|:---------------|
+| RC-017-A | FDP Layer 1 operates independently of Session Awareness Service — focus declaration, persistent header, and DX mode all function without Layer 2 | Inherent Safety | SYS-BRG-009, SYS-BRG-010 |
+| RC-017-B | Automatic reconnection with exponential backoff minimizes outage window | Protective | SYS-OVI-022 |
+| RC-017-C | Session service health monitoring and restart automation (operational) | Protective | Deployment runbook |
+
+| P2 (Post-control) | Residual Risk | Acceptance |
+|:------------------|:--------------|:-----------|
+| 1 (Very unlikely) | 4 (Low) | ACCEPTABLE — FDP Layer 1 provides primary safety; Layer 2 outage is detectable and auto-recoverable; compound scenario (outage + multi-case) is rare |
+
+---
+
 ## 3. Risk Summary
 
 | Risk ID | Hazard | Initial Risk | Residual Risk | Status |
@@ -363,6 +496,11 @@ This document identifies hazards, analyzes foreseeable sequences of events leadi
 | RISK-010 | Incorrect MPP Metadata | 6 (Medium) | 3 (Low) | ACCEPTABLE |
 | RISK-011 | Unsupported Image Format | 4 (Low) | 2 (Low) | ACCEPTABLE |
 | RISK-012 | Path Traversal Attack | 6 (Medium) | 3 (Low) | ACCEPTABLE |
+| RISK-013 | Color Inaccuracy | 9 (Medium) | 3 (Low) | ACCEPTABLE |
+| RISK-014 | Bridge Failure During Case Switch | 12 (High) | 4 (Low) | ACCEPTABLE |
+| RISK-015 | JWT Expiry During Bridge Outage | 6 (Medium) | 2 (Low) | ACCEPTABLE |
+| RISK-016 | Popup Blocker Prevents Viewer | 6 (Medium) | 4 (Low) | ACCEPTABLE |
+| RISK-017 | Session Service Outage Masks Multi-Case | 8 (Medium) | 4 (Low) | ACCEPTABLE |
 
 ## 4. Overall Benefit-Risk Conclusion
 
@@ -380,6 +518,8 @@ All identified risks have been reduced to acceptable or ALARP levels. The overal
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-21 | QA | Initial Hazard Analysis |
 | 1.1 | 2026-01-22 | QA | Added Image Management Service hazards (RISK-009 to RISK-012) |
+| 1.2 | 2026-02-02 | QA | Added RISK-013 (Color Inaccuracy) with risk controls for ICC profile handling and conversion fidelity |
+| 1.3 | 2026-02-28 | QA | Added RISK-014 through RISK-017 (Orchestrator Bridge Hazards) covering bridge failure during case switch, JWT expiry during outage, popup blocker, and session service outage |
 
 ---
 

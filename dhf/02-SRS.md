@@ -3,7 +3,7 @@
 ---
 document_id: SRS-001
 title: Digital Viewer Module — System Requirements Specification
-version: 1.2
+version: 1.4
 status: ACTIVE
 owner: Engineering
 created_date: 2026-01-21
@@ -53,6 +53,9 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-UI-008 | The system shall provide a collapsible tools panel that can be hidden/shown | UN-VWR-004 | Demonstration |
 | SYS-UI-009 | The system shall provide magnification presets (1x, 2x, 5x, 10x, 20x, 40x) for quick zoom navigation | UN-VWR-003 | Demonstration |
 | SYS-UI-010 | The system shall display current approximate magnification level | UN-VWR-003 | Inspection |
+| SYS-UI-011 | The system shall provide hover preview for slide labels in gallery view after 2-second delay | UN-SIA-002 | Demonstration |
+| SYS-UI-012 | The system shall provide an info button on slide items to access label and macro images | UN-SIA-003 | Demonstration |
+| SYS-UI-013 | The system shall display slide label and macro images in a modal dialog when info button is clicked | UN-SIA-001, UN-SIA-003 | Demonstration |
 
 ### 3.3 Focus Declaration Protocol (FDP) Requirements
 
@@ -166,9 +169,26 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-ERR-003 | The system shall prompt re-authentication when JWT expires or is invalid | UN-INT-001 | Test |
 | SYS-ERR-004 | The system shall display supersession notice when viewing a superseded scan | UN-VWR-003 | Demonstration |
 
-### 3.13 Image Management Service Requirements (Tile Server)
+### 3.13 Orchestrator Bridge Resilience Requirements
 
-#### 3.13.1 Image Format Support
+Requirements for the viewer's behavior when operating as a child window of the Okapi orchestrator via the `postMessage` bridge. These requirements define how the viewer degrades, recovers, and communicates bridge status to the pathologist. The complementary orchestrator-side requirements are defined in the Okapi SRS (SYS-OVI-*).
+
+| ID | System Requirement | Trace to User Need | Verification Method |
+|:---|:-------------------|:-------------------|:--------------------|
+| SYS-BRG-001 | The viewer shall continue rendering tiles, accepting annotations, and supporting measurements when the orchestrator bridge is in degraded state (heartbeat timeout). | UN-BRG-001 | Test |
+| SYS-BRG-002 | The viewer shall operate with the last-received JWT when the bridge is disconnected, until the token expires. | UN-BRG-001 | Test |
+| SYS-BRG-003 | The viewer shall display a non-intrusive visual indicator (e.g., amber status bar, ≤24px height) when the bridge is in degraded state. The indicator shall not obscure diagnostic image content. | UN-BRG-002 | Test, Inspection |
+| SYS-BRG-004 | The viewer shall distinguish between bridge-degraded state and bridge-disconnected state: degraded means heartbeat timeout (recoverable); disconnected means the orchestrator window is confirmed closed (requires relaunch). | UN-BRG-002 | Test |
+| SYS-BRG-005 | On bridge recovery (heartbeat resumes or `BRIDGE_RECONNECT` received), the viewer shall validate the received case context against its current case and resynchronize silently if contexts match. | UN-BRG-003 | Test |
+| SYS-BRG-006 | On bridge recovery with a case context mismatch (orchestrator switched cases during disconnection), the viewer shall prompt the user to confirm the case switch before accepting the new context. | UN-BRG-003, UN-SAF-005 | Test |
+| SYS-BRG-007 | When the viewer's JWT expires and the bridge is unavailable, the viewer shall display a non-blocking banner ("Session expiring — reconnect to continue") without closing, navigating away, or clearing cached tiles. | UN-BRG-004 | Test |
+| SYS-BRG-008 | The viewer shall not persist any bridge state to `localStorage` or `sessionStorage`. All bridge state (connection status, heartbeat timers, JWT) shall be held in memory and discarded on viewer close. | UN-BRG-004 | Inspection |
+| SYS-BRG-009 | The viewer's FDP Layer 1 (focus declaration, persistent header, diagnostic mode banner) shall function identically in bridged and standalone modes. Bridge availability shall not affect focus safety controls. | UN-BRG-005 | Test |
+| SYS-BRG-010 | The viewer's FDP Layer 2 (Session Awareness Service integration) shall degrade gracefully: if the WebSocket connection to the session service fails, multi-case warnings shall be disabled with no impact on Layer 1 or core viewer functions. | UN-BRG-005 | Test |
+
+### 3.14 Image Management Service Requirements (Tile Server)
+
+#### 3.14.1 Image Format Support
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -182,7 +202,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-008 | The system shall support tile serving for DICOM WSI format (.dcm) via dicom plugin | UN-IMG-001 | Test |
 | SYS-IMS-009 | The system shall support tile serving for JPEG2000 format (.jp2) via openjpeg plugin | UN-IMG-001 | Test |
 
-#### 3.13.2 REST API Endpoints
+#### 3.14.2 REST API Endpoints
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -196,7 +216,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-017 | The system shall expose GET /images for listing available images | UN-INT-001 | Test |
 | SYS-IMS-018 | The system shall expose GET /health for health check monitoring | UN-VWR-002 | Test |
 
-#### 3.13.3 Tile Generation and Encoding
+#### 3.14.3 Tile Generation and Encoding
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -205,7 +225,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-021 | The system shall generate DeepZoom descriptors dynamically without creating stored .dzi files | UN-ISP-003 | Analysis |
 | SYS-IMS-022 | The system shall generate tiles on-demand from source images without pre-generating tile files | UN-ISP-003 | Analysis |
 
-#### 3.13.4 Metadata and Calibration
+#### 3.14.4 Metadata and Calibration
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -214,7 +234,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-025 | The system shall include tile size (tileWidth, tileHeight) in metadata responses | UN-VWR-002 | Test |
 | SYS-IMS-026 | The system shall include pyramid level count in metadata responses | UN-VWR-002 | Test |
 
-#### 3.13.5 Multi-Channel and Z-Stack Support
+#### 3.14.5 Multi-Channel and Z-Stack Support
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -223,7 +243,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-029 | The system shall support style parameter for false-color compositing of multi-channel images | UN-IMG-005 | Test |
 | SYS-IMS-030 | The system shall support band selection and min/max remapping via style parameter | UN-IMG-005 | Test |
 
-#### 3.13.6 Caching and Performance
+#### 3.14.6 Caching and Performance
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -232,7 +252,7 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-033 | The system shall set appropriate Cache-Control headers on tile responses | UN-ISP-001 | Test |
 | SYS-IMS-034 | The system shall support random access to tiles within pyramidal images (no full image loading) | UN-ISP-001 | Analysis |
 
-#### 3.13.7 Integration and Deployment
+#### 3.14.7 Integration and Deployment
 
 | ID | System Requirement | Trace to User Need | Verification Method |
 |:---|:-------------------|:-------------------|:--------------------|
@@ -240,6 +260,32 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | SYS-IMS-036 | The system shall support JWT-based authentication for tile requests | UN-INT-001 | Test |
 | SYS-IMS-037 | The system shall provide auto-generated API documentation (OpenAPI/Swagger) | UN-INT-001 | Inspection |
 | SYS-IMS-038 | The system shall support Docker container deployment | UN-ISP-003 | Demonstration |
+
+#### 3.14.8 Associated Images Fallback and Generation
+
+| ID | System Requirement | Trace to User Need | Verification Method |
+|:---|:-------------------|:-------------------|:--------------------|
+| SYS-IMS-039 | The system shall expose GET /slides/{slide_id}/label for slide label images | UN-IMG-002, UN-SIA-001 | Test |
+| SYS-IMS-040 | The system shall expose GET /slides/{slide_id}/macro for slide macro images | UN-IMG-002 | Test |
+| SYS-IMS-041 | The system shall expose GET /slides/{slide_id}/thumbnail for slide thumbnails with configurable dimensions | UN-IMG-004 | Test |
+| SYS-IMS-042 | The system shall expose GET /slides/{slide_id}/associated returning availability info for all associated image types | UN-IMG-007 | Test |
+| SYS-IMS-043 | The system shall generate placeholder label images when no embedded label exists in the source file | UN-IMG-007 | Test |
+| SYS-IMS-044 | The system shall extract thumbnails from pyramid levels when no embedded thumbnail exists | UN-IMG-007 | Test |
+| SYS-IMS-045 | The system shall report source type (embedded/generated) for each associated image in availability responses | UN-IMG-007 | Test |
+
+#### 3.14.9 Color Fidelity
+
+| ID | System Requirement | Trace to User Need | Verification Method |
+|:---|:-------------------|:-------------------|:--------------------|
+| SYS-IMS-046 | The system shall serve tiles without applying ICC profile color transformations | UN-IMG-008 | Test |
+| SYS-IMS-047 | The system shall preserve original pixel color values from source images | UN-IMG-008 | Test, Analysis |
+
+#### 3.14.10 Image Conversion
+
+| ID | System Requirement | Trace to User Need | Verification Method |
+|:---|:-------------------|:-------------------|:--------------------|
+| SYS-IMS-048 | The system shall preserve magnification metadata (resolution/MPP) during image format conversion | UN-IMG-003 | Test |
+| SYS-IMS-049 | The system shall preserve color fidelity during image format conversion | UN-IMG-008 | Test |
 
 ## 4. Performance Requirements Summary
 
@@ -306,6 +352,16 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | UN-ISP-001 | SYS-IMS-032, SYS-IMS-033, SYS-IMS-034 |
 | UN-ISP-002 | SYS-IMS-031 |
 | UN-ISP-003 | SYS-IMS-021, SYS-IMS-022, SYS-IMS-038 |
+| UN-IMG-007 | SYS-IMS-042, SYS-IMS-043, SYS-IMS-044, SYS-IMS-045 |
+| UN-IMG-008 | SYS-IMS-046, SYS-IMS-047, SYS-IMS-048, SYS-IMS-049 |
+| UN-SIA-001 | SYS-IMS-039, SYS-UI-013 |
+| UN-SIA-002 | SYS-UI-011 |
+| UN-SIA-003 | SYS-UI-012, SYS-UI-013 |
+| UN-BRG-001 | SYS-BRG-001, SYS-BRG-002, SYS-BRG-009 |
+| UN-BRG-002 | SYS-BRG-003, SYS-BRG-004 |
+| UN-BRG-003 | SYS-BRG-005, SYS-BRG-006 |
+| UN-BRG-004 | SYS-BRG-007, SYS-BRG-008 |
+| UN-BRG-005 | SYS-BRG-009, SYS-BRG-010 |
 
 ## 6. Revision History
 
@@ -314,6 +370,8 @@ The Digital Viewer Module is a browser-based application for clinical examinatio
 | 1.0 | 2026-01-21 | Engineering | Initial SRS derived from specification v2.1 |
 | 1.1 | 2026-01-21 | Engineering | Added SYS-UI-008 to SYS-UI-010 (zoom presets, collapsible tools), SYS-ANN-011 (text annotations) |
 | 1.2 | 2026-01-22 | Engineering | Added Section 3.13 Image Management Service Requirements (SYS-IMS-001 to SYS-IMS-038) derived from library evaluation report; updated traceability matrix |
+| 1.3 | 2026-02-02 | Engineering | Added SYS-UI-011 to SYS-UI-013 (slide info UI features), SYS-IMS-039 to SYS-IMS-049 (associated images fallback, color fidelity, image conversion requirements) |
+| 1.4 | 2026-02-28 | Engineering | Added Section 3.13 Orchestrator Bridge Resilience (SYS-BRG-001 to SYS-BRG-010); renumbered IMS section to 3.14 |
 
 ---
 

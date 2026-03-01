@@ -50,8 +50,15 @@ class SourceManager:
     def _resolve_image_path(self, image_id: str) -> Path:
         """Resolve an image ID to a file path.
 
+        Resolution order:
+        1. Database lookup (if storage_db_url is configured) — query wsi.slides
+           by slide_id, construct absolute path from clinical_root + relative_path
+        2. Direct path under image_dir
+        3. Extension matching under image_dir
+        4. Absolute path (security-checked)
+
         Args:
-            image_id: Image identifier (filename or relative path).
+            image_id: Image identifier (filename, relative path, or slide_id).
 
         Returns:
             Absolute path to the image file.
@@ -63,18 +70,29 @@ class SourceManager:
         # Normalize the image ID (handle URL encoding, etc.)
         image_id = image_id.replace('%2F', '/').replace('%5C', '\\')
 
-        # Try direct path first
+        # 1. Database resolution (SDS-STR-001 §6)
+        settings = get_settings()
+        if settings.storage_db_url:
+            from . import db
+            slide = db.resolve_slide_path(image_id)
+            if slide and slide.get('relative_path'):
+                clinical_root = settings.storage_clinical_root or self._image_dir
+                db_path = Path(clinical_root) / slide['relative_path']
+                if db_path.exists() and db_path.is_file():
+                    return db_path.resolve()
+
+        # 2. Try direct path under image_dir
         path = self._image_dir / image_id
         if path.exists() and path.is_file():
             return path.resolve()
 
-        # Try without extension matching
+        # 3. Try extension matching
         for ext in self._allowed_extensions:
             candidate = self._image_dir / f'{image_id}{ext}'
             if candidate.exists() and candidate.is_file():
                 return candidate.resolve()
 
-        # Try as absolute path if it exists
+        # 4. Try as absolute path if it exists
         abs_path = Path(image_id)
         if abs_path.is_absolute() and abs_path.exists():
             # Security check: ensure it's within allowed directory

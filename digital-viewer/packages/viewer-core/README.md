@@ -242,6 +242,110 @@ $: magnification = $slideMetadata?.magnification;
 | `isLoading` | `boolean` | Loading state |
 | `viewerError` | `Error \| null` | Current error |
 | `overlayLayers` | `OverlayLayer[]` | Active overlay layers |
+| `authToken` | `string \| null` | JWT token for authenticated tile loading |
+| `authExpired` | `boolean` | Whether the JWT has expired |
+| `orchestratorState` | `'connected' \| 'disconnected' \| 'lost' \| 'ended' \| null` | Orchestrator bridge lifecycle state (`null` in standalone mode) |
+| `tileFailureState` | `{ thresholdExceeded: boolean; failureRate: number }` | Tile failure tracking |
+
+## Orchestrator Bridge
+
+The viewer-core package includes the `OrchestratorBridge` class for receiving commands from the Okapi orchestrator over `postMessage`. This is used in **orchestrated mode** when the viewer is launched as a child window by the Okapi web-client.
+
+```typescript
+import { OrchestratorBridge, type BridgeState } from '@pathology/viewer-core';
+import type { InitPayload, ViewerAuditEvent } from '@pathology/viewer-core';
+
+const bridge = new OrchestratorBridge();
+
+bridge.onInit((payload: InitPayload) => {
+  // Received JWT, case config, tile server URL
+});
+
+bridge.onTokenRefresh((token: string) => {
+  // Update authToken store
+});
+
+bridge.onCaseChange((caseId: string, accession: string) => {
+  // Switch to a new case
+});
+
+bridge.onStateChange((state: BridgeState) => {
+  // 'waiting' | 'connected' | 'disconnected' | 'lost' | 'ended'
+});
+
+bridge.initialize(); // Sends viewer:ready, starts listening
+```
+
+### Bridge States
+
+| State | Meaning |
+|-------|---------|
+| `waiting` | Bridge initialized, waiting for `orchestrator:init` |
+| `connected` | Active connection with healthy heartbeat |
+| `disconnected` | Heartbeat missed for >15 seconds |
+| `lost` | No heartbeat for >60 seconds |
+| `ended` | Orchestrator sent logout command |
+
+### Sending Audit Events
+
+The bridge can send audit events back to the orchestrator for backend persistence:
+
+```typescript
+bridge.sendAuditEvent({
+  eventType: 'VIEWER_SLIDE_VIEWED',
+  caseId: 'case-123',
+  slideId: 'slide-456',
+  accessionNumber: 'ACC-789',
+  occurredAt: new Date().toISOString(),
+});
+```
+
+## ErrorOverlay Component
+
+The `ErrorOverlay` component displays full-screen error states within the viewer. It handles both viewer-specific errors and orchestrator lifecycle states:
+
+```svelte
+<ErrorOverlay type="auth-expired" message="Session ended by workstation" />
+<ErrorOverlay type="service-unavailable" message="Connection to workstation lost" />
+<ErrorOverlay type="tile-failure" />
+```
+
+### Error Types
+
+| Type | Trigger | Description |
+|------|---------|-------------|
+| `tile-failure` | `tileFailureState.thresholdExceeded` | >50% tile load failures |
+| `service-unavailable` | `orchestratorState === 'lost'` | Orchestrator unreachable |
+| `auth-expired` | `authExpired` or `orchestratorState === 'ended'` | JWT expired or session ended |
+| `superseded` | Slide metadata check | Viewing an older scan version |
+
+### Overlay Priority in Viewer.svelte
+
+When multiple error conditions occur simultaneously, the `Viewer` component renders overlays in priority order:
+
+1. `orchestratorState === 'ended'` (session ended — highest priority)
+2. `orchestratorState === 'lost'` (connection lost)
+3. `orchestratorState === 'disconnected'` (reconnecting banner, viewer still usable)
+4. `authExpired` (JWT expired)
+5. `tileFailureState.thresholdExceeded` (tile loading failures)
+
+In standalone mode (when `orchestratorState` is `null`), the orchestrator overlays are skipped.
+
+## Authenticated Tile Loading
+
+When running in orchestrated mode, the viewer uses JWT-authenticated tile loading. The `authToken` store is set by the orchestrated `App.svelte` wrapper when tokens are received from the orchestrator. The `Viewer` component watches this store and updates the OpenSeadragon XHR headers:
+
+```typescript
+// In Viewer.svelte — $effect watches authToken changes
+$effect(() => {
+  const token = $authToken;
+  if (viewer && token) {
+    viewer.ajaxHeaders = { Authorization: `Bearer ${token}` };
+  }
+});
+```
+
+This requires OpenSeadragon's `loadTilesWithAjax: true` option, which uses `XMLHttpRequest` instead of `<img>` tags for tile fetching.
 
 ## Tile Source Factory
 

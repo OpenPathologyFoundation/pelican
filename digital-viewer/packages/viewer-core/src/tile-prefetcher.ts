@@ -170,12 +170,12 @@ export function createTilePrefetcher(
 
     // Get current bounds expanded by prefetch radius
     const bounds = viewport.getBounds(true);
-    const expandedBounds = new (viewer as any).Rect(
-      bounds.x - bounds.width * mergedConfig.prefetchRadius,
-      bounds.y - bounds.height * mergedConfig.prefetchRadius,
-      bounds.width * (1 + 2 * mergedConfig.prefetchRadius),
-      bounds.height * (1 + 2 * mergedConfig.prefetchRadius)
-    );
+    const expandedBounds = {
+      x: bounds.x - bounds.width * mergedConfig.prefetchRadius,
+      y: bounds.y - bounds.height * mergedConfig.prefetchRadius,
+      width: bounds.width * (1 + 2 * mergedConfig.prefetchRadius),
+      height: bounds.height * (1 + 2 * mergedConfig.prefetchRadius),
+    };
 
     // Bias expansion toward predicted movement direction
     if (Math.abs(velocity.x) > 0.01 || Math.abs(velocity.y) > 0.01) {

@@ -271,6 +271,8 @@ User clicks different case in Case Context
 | Minimal default UI | SYS-UI-001, SYS-UI-002 | — |
 | Slide gallery | SYS-UI-003, SYS-UI-004 | — |
 | Dual-window architecture | SYS-UI-006 | — |
+| OrchestratorBridge (degradation) | SYS-BRG-001 through SYS-BRG-010 | RC-014, RC-015 |
+| Standalone mode | SYS-BRG-001, SYS-BRG-009 | RC-014-A |
 | Measurement engine | SYS-MSR-001, SYS-MSR-002, SYS-MSR-003 | RC-003 |
 | Calibration display | SYS-MSR-004, SYS-MSR-005, SYS-DXM-003 | RC-003 |
 | DX Mode measurement block | SYS-MSR-007 | RC-003 |

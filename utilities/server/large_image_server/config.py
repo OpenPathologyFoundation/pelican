@@ -99,6 +99,22 @@ class ServerSettings(BaseSettings):
         description='Enable Swagger/OpenAPI documentation',
     )
 
+    # Storage settings (SDS-STR-001)
+    storage_db_url: str | None = Field(
+        default=None,
+        description='PostgreSQL connection URL for WSI metadata (e.g., postgresql://user:pass@host:port/db)',
+    )
+    storage_clinical_root: Path | None = Field(
+        default=None,
+        description='Filesystem root for clinical slide collection',
+    )
+
+    # HMAC integrity settings (SDS-STR-001 §5.3)
+    hmac_key: str | None = Field(
+        default=None,
+        description='Secret key for HMAC-SHA256 integrity verification',
+    )
+
     # JWT Authentication settings (SRS SYS-IMS-036)
     jwt_enabled: bool = Field(
         default=False,

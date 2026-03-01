@@ -3,7 +3,7 @@
 ---
 document_id: PURS-001
 title: Digital Viewer Module — Product & User Requirements
-version: 1.1
+version: 1.3
 status: ACTIVE
 owner: Product Management
 created_date: 2026-01-21
@@ -127,8 +127,30 @@ The Digital Viewer Module enables pathologists to examine digitized whole slide 
 | UN-IMG-004 | The user needs thumbnails for quick slide preview in gallery views | Reduces time to identify correct slide in multi-slide cases | High |
 | UN-IMG-005 | The user needs multi-channel fluorescence support for IF/IHC slides | Multiplex immunofluorescence staining requires channel selection, false-color compositing, and intensity adjustment | Medium |
 | UN-IMG-006 | The user needs Z-stack support for thick section or confocal images | Some specimens require examination at multiple focal planes | Low |
+| UN-IMG-007 | The user needs access to slide label and macro images even when not embedded in the source file | Some formats lack embedded associated images; placeholder labels maintain workflow consistency | High |
+| UN-IMG-008 | The user needs color-accurate display of slides without unwanted color transformations | Color accuracy is essential for diagnostic evaluation; ICC profile transformations may alter tissue appearance | High |
 
-### 4.11 Image Service Performance
+### 4.11 Slide Information Access
+
+| ID | User Need Statement | Rationale/Clinical Justification | Priority |
+|:---|:--------------------|:---------------------------------|:---------|
+| UN-SIA-001 | The user needs quick access to slide label images to verify physical slide matches digital | Label verification prevents case-slide mismatch errors | High |
+| UN-SIA-002 | The user needs preview of slide labels when hovering over slides in the gallery | Rapid label verification without interrupting workflow | Medium |
+| UN-SIA-003 | The user needs an information button to view slide details including label and macro images | Supports detailed slide verification when needed | Medium |
+
+### 4.12 Orchestrator Bridge Resilience
+
+When launched from the Okapi orchestrator, the viewer operates as a child window receiving case context and authentication tokens via a `postMessage` bridge. These user needs address the viewer's behavior when that bridge is degraded or lost.
+
+| ID | User Need Statement | Rationale/Clinical Justification | Priority |
+|:---|:--------------------|:---------------------------------|:---------|
+| UN-BRG-001 | The user needs the viewer to continue displaying and navigating the current case if the orchestrator connection is lost. | A rigid dependency where the viewer stops working on bridge failure is unacceptable during active diagnosis. The pathologist must be able to complete the current examination. | Critical |
+| UN-BRG-002 | The user needs clear visual indication when the orchestrator connection is degraded, distinct from normal operation. | Silent communication failures are dangerous — the pathologist may assume the two windows are synchronized when they are not. | High |
+| UN-BRG-003 | The user needs the viewer to resynchronize with the orchestrator automatically when the connection is restored, without manual intervention. | Requiring the pathologist to close and reopen the viewer after a momentary disconnection is disruptive and creates opportunity for case-context errors. | High |
+| UN-BRG-004 | The user needs the viewer to handle JWT expiry gracefully — displaying a non-intrusive notice rather than abruptly closing or becoming unresponsive. | Abrupt closure during active annotation or measurement would lose work. The pathologist needs time to save work and reconnect. | High |
+| UN-BRG-005 | The user needs the Session Awareness Service (multi-user case awareness) to be non-essential — its unavailability must not affect slide viewing, annotations, or measurements. | The session service is a collaborative feature, not a diagnostic one. Its failure must not cascade into diagnostic workflow disruption. | Critical |
+
+### 4.13 Image Service Performance
 
 | ID | User Need Statement | Rationale/Clinical Justification | Priority |
 |:---|:--------------------|:---------------------------------|:---------|
@@ -160,6 +182,8 @@ All User Needs in this document trace forward to System Requirements in [02-SRS.
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-21 | Product Management | Initial PURS derived from specification v2.1 |
 | 1.1 | 2026-01-22 | Product Management | Added UN-IMG-001 to UN-IMG-006 (Image Format Support), UN-ISP-001 to UN-ISP-003 (Image Service Performance) derived from library evaluation report |
+| 1.2 | 2026-02-02 | Product Management | Added UN-IMG-007/008 (associated images fallback, color fidelity), UN-SIA-001/002/003 (Slide Information Access) |
+| 1.3 | 2026-02-28 | Product Management | Added UN-BRG-001 through UN-BRG-005 (Orchestrator Bridge Resilience) |
 
 ---
 

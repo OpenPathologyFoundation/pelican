@@ -85,3 +85,4 @@ monkeytype.sqlite3
 
 # Build/test artifacts directory
 /artifacts/
+CHANGELOG-WIP.md

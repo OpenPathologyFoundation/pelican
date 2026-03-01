@@ -3,7 +3,7 @@
 ---
 document_id: DHF-IDX-001
 title: Digital Viewer Module — Design History File Index
-version: 1.1
+version: 1.3
 status: ACTIVE
 owner: Quality Assurance
 created_date: 2026-01-21
@@ -36,18 +36,19 @@ This document serves as the master index for the Design History File (DHF) of th
 
 | ID | Document | File | Version | Status |
 |:---|:---------|:-----|:--------|:-------|
-| PURS-001 | Product & User Requirements Specification | [01-PURS.md](./01-PURS.md) | 1.1 | ACTIVE |
-| SRS-001 | System Requirements Specification | [02-SRS.md](./02-SRS.md) | 1.2 | ACTIVE |
-| SEC-001 | Cybersecurity Documentation | [03-Cybersecurity.md](./03-Cybersecurity.md) | 1.1 | ACTIVE |
+| PURS-001 | Product & User Requirements Specification | [01-PURS.md](./01-PURS.md) | 1.3 | ACTIVE |
+| SRS-001 | System Requirements Specification | [02-SRS.md](./02-SRS.md) | 1.4 | ACTIVE |
+| SEC-001 | Cybersecurity Documentation | [03-Cybersecurity.md](./03-Cybersecurity.md) | 1.2 | ACTIVE |
 | SDS-OVR-001 | Software Design Specification — Overview | [04-SDS/00-SDS-Overview.md](./04-SDS/00-SDS-Overview.md) | 1.0 | ACTIVE |
 | SDS-VWR-001 | Viewer Core Architecture | [04-SDS/01-Viewer-Architecture.md](./04-SDS/01-Viewer-Architecture.md) | 1.0 | ACTIVE |
 | SDS-FDP-001 | Focus Declaration Protocol Architecture | [04-SDS/02-FDP-Architecture.md](./04-SDS/02-FDP-Architecture.md) | 1.0 | ACTIVE |
 | SDS-ANN-001 | Annotation System Architecture | [04-SDS/03-Annotation-Architecture.md](./04-SDS/03-Annotation-Architecture.md) | 1.0 | ACTIVE |
 | SDS-TEL-001 | Telemetry Governance Architecture | [04-SDS/04-Telemetry-Architecture.md](./04-SDS/04-Telemetry-Architecture.md) | 1.0 | ACTIVE |
-| SDS-TLS-001 | Tile Server (Image Management Service) Architecture | [04-SDS/05-TileServer-Architecture.md](./04-SDS/05-TileServer-Architecture.md) | 1.0 | ACTIVE |
+| SDS-TLS-001 | Tile Server (Image Management Service) Architecture | [04-SDS/05-TileServer-Architecture.md](./04-SDS/05-TileServer-Architecture.md) | 1.1 | ACTIVE |
+| SDS-STR-001 | WSI Storage Architecture | [04-SDS/06-WSI-Storage-Architecture.md](./04-SDS/06-WSI-Storage-Architecture.md) | 0.1 | DRAFT |
 | RMP-001 | Risk Management Plan | [05a-Risk-Plan.md](./05a-Risk-Plan.md) | 1.0 | ACTIVE |
-| RMF-001 | Hazard Analysis | [05b-Hazard-Analysis.md](./05b-Hazard-Analysis.md) | 1.1 | ACTIVE |
-| VVP-001 | Verification & Validation Plan | [06-VVP.md](./06-VVP.md) | 1.1 | ACTIVE |
+| RMF-001 | Hazard Analysis | [05b-Hazard-Analysis.md](./05b-Hazard-Analysis.md) | 1.3 | ACTIVE |
+| VVP-001 | Verification & Validation Plan | [06-VVP.md](./06-VVP.md) | 1.3 | ACTIVE |
 
 ### 3.2 Source Specification
 
@@ -102,6 +103,8 @@ All documents in this DHF are version-controlled in Git. Changes require:
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-21 | QA | Initial DHF index creation |
 | 1.1 | 2026-01-22 | QA | Added SDS-TLS-001 (Tile Server Architecture); updated document versions |
+| 1.2 | 2026-02-02 | QA | Updated document versions for associated images, color fidelity, and UI features |
+| 1.3 | 2026-02-28 | QA | Added SDS-STR-001 (WSI Storage Architecture); updated PURS to v1.3 (bridge resilience), SRS to v1.4 (bridge requirements), RMF to v1.3 (bridge hazards); cross-reference to Okapi SDS-OVI-001 |
 
 ---
 

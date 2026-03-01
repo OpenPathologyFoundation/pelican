@@ -135,7 +135,7 @@ export async function connectSession(): Promise<void> {
       windowId: currentHandler.getWindowId(),
     }));
   } catch (error) {
-    console.error('[Session] Failed to connect:', error);
+    console.info('[Session] Session service unavailable — multi-case safety warnings disabled');
     sessionState.update((state) => ({
       ...state,
       connected: false,

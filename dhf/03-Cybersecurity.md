@@ -3,7 +3,7 @@
 ---
 document_id: SEC-001
 title: Digital Viewer Module — Cybersecurity Documentation
-version: 1.1
+version: 1.2
 status: ACTIVE
 owner: Security Engineering
 created_date: 2026-01-21
@@ -122,6 +122,26 @@ This document defines the cybersecurity threat model, security controls, and ris
 **Attack Vector**: Man-in-the-middle, compromised image source
 **Controls**: SC-027, SC-028
 
+#### T-009: Cross-Window Message Injection
+**Description**: Malicious script in another tab sends forged postMessage events to the viewer window, attempting to inject false case context, trigger unauthorized case switches, or extract PHI.
+**Attack Vector**: XSS in a co-resident page; malicious browser extension; compromised third-party iframe
+**Controls**: SC-031, SC-032, SC-033
+
+#### T-010: WSI Image Tampering on Storage
+**Description**: Attacker (or silent corruption) modifies whole slide image files on the storage volume, introducing diagnostic artifacts or replacing tissue images.
+**Attack Vector**: Compromised storage account; ransomware; bit rot on aging media; insider threat with filesystem access
+**Controls**: SC-034, SC-035, SC-036
+
+#### T-011: Metadata-Only Attack via Sidecar Files
+**Description**: If integrity hashes were stored as sidecar files alongside images, an attacker with storage access could replace both the image and its hash simultaneously, bypassing tamper detection.
+**Attack Vector**: Storage-level compromise where attacker has write access to the image volume
+**Controls**: SC-034, SC-037
+
+#### T-012: Bridge JWT Interception
+**Description**: JWT provisioned from orchestrator to viewer via postMessage is intercepted by a malicious co-resident script and used to access tile server or annotation APIs.
+**Attack Vector**: XSS in orchestrator page; browser extension with content script injection
+**Controls**: SC-031, SC-033, SC-038
+
 ## 4. Security Controls
 
 ### 4.1 Authentication and Authorization
@@ -184,6 +204,24 @@ This document defines the cybersecurity threat model, security controls, and ris
 | SC-029 | Tile server authentication | JWT validation on all endpoints; case-scoped access | Test |
 | SC-030 | CORS configuration | Configurable origin allowlist; default restrictive | Test |
 
+### 4.7 Cross-Window Bridge Security
+
+| ID | Control | Implementation | Verification |
+|:---|:--------|:---------------|:-------------|
+| SC-031 | postMessage origin validation | OrchestratorBridge validates `event.origin` against configured allowlist on every received message; messages from unexpected origins are silently dropped | Test |
+| SC-032 | Typed message envelope with sequence numbers | All bridge messages use a typed envelope (`{type, seq, payload}`) enabling detection of replayed, out-of-order, or injected messages | Analysis |
+| SC-033 | No credentials in postMessage payload | JWT is transmitted via a dedicated `JWT_REFRESH` message type; viewer stores token in memory only; token is never placed in URL parameters, localStorage, or sessionStorage | Inspection |
+| SC-038 | JWT memory-only storage in viewer | Viewer holds JWT exclusively in a JavaScript closure variable; no persistence to any browser storage API; token cleared on window close | Test |
+
+### 4.8 WSI Image Integrity
+
+| ID | Control | Implementation | Verification |
+|:---|:--------|:---------------|:-------------|
+| SC-034 | HMAC-SHA256 integrity verification | Each slide's integrity hash is computed at ingestion using `HMAC-SHA256(server_key, file_bytes)` and stored in the database `slides.hmac` column | Test |
+| SC-035 | Database-only hash storage | HMAC digests are stored exclusively in the database, never as sidecar files on the storage volume; this prevents an attacker with storage access from replacing both image and hash simultaneously | Analysis |
+| SC-036 | Background integrity sweep | A configurable background job recomputes HMAC for all stored slides and compares against database values; mismatches generate alerts with slide ID, expected vs actual hash, and file size delta | Test |
+| SC-037 | HMAC key separation from storage | The HMAC secret key is provisioned via environment variable (`LARGE_IMAGE_HMAC_KEY`), never stored in the database, version control, or on the image storage volume; minimum key length 256 bits | Inspection |
+
 ## 5. Security Requirements Traceability
 
 | Security Control | Related System Requirements |
@@ -198,6 +236,9 @@ This document defines the cybersecurity threat model, security controls, and ris
 | SC-027 | SYS-IMS-023, SYS-MSR-006 |
 | SC-028, SC-029 | SYS-IMS-035, SYS-IMS-036 |
 | SC-030 | SYS-IMS-035 |
+| SC-031, SC-032, SC-033 | SYS-BRG-001, SYS-BRG-008 |
+| SC-034, SC-035, SC-036, SC-037 | SDS-STR-001 §5 (Integrity Verification) |
+| SC-038 | SYS-BRG-008, SYS-OVI-014 |
 
 ## 6. Vulnerability Management
 
@@ -235,6 +276,10 @@ This document defines the cybersecurity threat model, security controls, and ris
 | Sophisticated JWT attack | Low | Short expiration; refresh via Portal; institutional SSO |
 | Client-side tampering | Low | Server-side validation; event sourcing; audit trail |
 | Zero-day browser vulnerability | Low | Standard browser security model; rapid patch deployment |
+| Cross-window message injection | Low | Origin validation on every message; typed envelopes with sequence numbers; no credentials in URL/storage |
+| WSI image tampering (storage compromise) | Low | HMAC-SHA256 with server-held key; database-only hash storage; background verification sweep |
+| HMAC key compromise | Low | Key separated from storage and database; rotation strategy with dual-key verification; operational monitoring |
+| Bridge JWT interception via XSS | Low | Memory-only JWT storage; CSP enforcement; origin validation prevents exfiltration via postMessage |
 
 ## 9. Revision History
 
@@ -242,6 +287,7 @@ This document defines the cybersecurity threat model, security controls, and ris
 |:--------|:-----|:-------|:------------|
 | 1.0 | 2026-01-21 | Security Engineering | Initial cybersecurity documentation |
 | 1.1 | 2026-01-22 | Security Engineering | Added tile server threats (T-006 to T-008) and security controls (SC-023 to SC-030) |
+| 1.2 | 2026-02-28 | Security Engineering | Added cross-window bridge threats (T-009, T-012), WSI integrity threats (T-010, T-011), and security controls (SC-031 to SC-038) |
 
 ---
 
