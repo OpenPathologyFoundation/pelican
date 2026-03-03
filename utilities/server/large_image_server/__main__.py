@@ -357,8 +357,6 @@ Examples:
         return _run_offline_command(args)
 
     # Create and run the app
-    from . import create_app
-
     print('Starting Large Image Server...')
     print(f'  Image directory: {args.image_dir.resolve()}')
     if args.db_url:
@@ -378,16 +376,65 @@ Examples:
     try:
         import uvicorn
 
-        app = create_app()
+        use_workers = args.workers if not args.reload else 1
+        need_import_string = use_workers > 1 or args.reload
 
-        uvicorn.run(
-            app,
-            host=args.host,
-            port=args.port,
-            reload=args.reload,
-            workers=args.workers if not args.reload else 1,
-            log_level='info',
-        )
+        if need_import_string:
+            # uvicorn requires an import string (not a Python object) when using
+            # multiple workers or reload, because it forks/re-imports the app.
+            # Export CLI settings as env vars so each worker picks them up via
+            # the Pydantic LARGE_IMAGE_SERVER_ prefix.
+            import os
+
+            _env_map = {
+                'LARGE_IMAGE_SERVER_IMAGE_DIR': str(args.image_dir.resolve()),
+                'LARGE_IMAGE_SERVER_HOST': args.host,
+                'LARGE_IMAGE_SERVER_PORT': str(args.port),
+                'LARGE_IMAGE_SERVER_RELOAD': str(args.reload).lower(),
+                'LARGE_IMAGE_SERVER_WORKERS': str(args.workers),
+                'LARGE_IMAGE_SERVER_SOURCE_CACHE_SIZE': str(args.source_cache_size),
+                'LARGE_IMAGE_SERVER_JPEG_QUALITY': str(args.jpeg_quality),
+                'LARGE_IMAGE_SERVER_DEFAULT_ENCODING': args.default_encoding,
+                'LARGE_IMAGE_SERVER_API_PREFIX': args.api_prefix,
+                'LARGE_IMAGE_SERVER_CORS_ENABLED': str(not args.no_cors).lower(),
+                'LARGE_IMAGE_SERVER_DOCS_ENABLED': str(not args.no_docs).lower(),
+            }
+            if args.cache_backend:
+                _env_map['LARGE_IMAGE_SERVER_CACHE_BACKEND'] = args.cache_backend
+            if args.db_url:
+                _env_map['LARGE_IMAGE_SERVER_STORAGE_DB_URL'] = args.db_url
+            if args.clinical_root:
+                _env_map['LARGE_IMAGE_SERVER_STORAGE_CLINICAL_ROOT'] = str(
+                    args.clinical_root.resolve()
+                )
+            if args.edu_root:
+                _env_map['LARGE_IMAGE_SERVER_STORAGE_EDU_ROOT'] = str(args.edu_root.resolve())
+            if args.hmac_key:
+                _env_map['LARGE_IMAGE_SERVER_HMAC_KEY'] = args.hmac_key
+
+            for key, value in _env_map.items():
+                os.environ[key] = value
+
+            uvicorn.run(
+                'large_image_server:create_app',
+                factory=True,
+                host=args.host,
+                port=args.port,
+                reload=args.reload,
+                workers=use_workers,
+                log_level='info',
+            )
+        else:
+            from . import create_app
+
+            app = create_app()
+
+            uvicorn.run(
+                app,
+                host=args.host,
+                port=args.port,
+                log_level='info',
+            )
     except KeyboardInterrupt:
         print('\nShutting down...')
     except ImportError as e:
