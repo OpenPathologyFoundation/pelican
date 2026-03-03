@@ -110,9 +110,37 @@ def _fetchall(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
 def get_slide_by_id(slide_id: str) -> dict[str, Any] | None:
     """Look up a slide by its unique slide_id.
 
+    Searches clinical (wsi) schema first, then educational (wsi_edu).
     Returns dict with keys: slide_id, relative_path, format, stain,
-    level_label, case_id (the accession-level case_id string).
+    level_label, case_id, collection ('clinical' or 'educational').
     """
+    # Try clinical schema first
+    result = _fetchone(
+        """
+        SELECT s.slide_id,
+               s.relative_path,
+               s.format,
+               s.stain,
+               s.level_label,
+               s.magnification,
+               s.width_px,
+               s.height_px,
+               s.mpp_x,
+               s.mpp_y,
+               c.case_id,
+               'clinical' AS collection
+          FROM wsi.slides s
+          JOIN wsi.blocks b ON b.id = s.block_id
+          JOIN wsi.parts  p ON p.id = b.part_id
+          JOIN wsi.cases  c ON c.id = p.case_id
+         WHERE s.slide_id = %s
+        """,
+        (slide_id,),
+    )
+    if result:
+        return result
+
+    # Fallback to educational schema
     return _fetchone(
         """
         SELECT s.slide_id,
@@ -125,11 +153,12 @@ def get_slide_by_id(slide_id: str) -> dict[str, Any] | None:
                s.height_px,
                s.mpp_x,
                s.mpp_y,
-               c.case_id
-          FROM wsi.slides s
-          JOIN wsi.blocks b ON b.id = s.block_id
-          JOIN wsi.parts  p ON p.id = b.part_id
-          JOIN wsi.cases  c ON c.id = p.case_id
+               c.case_id,
+               'educational' AS collection
+          FROM wsi_edu.slides s
+          JOIN wsi_edu.blocks b ON b.id = s.block_id
+          JOIN wsi_edu.parts  p ON p.id = b.part_id
+          JOIN wsi_edu.cases  c ON c.id = p.case_id
          WHERE s.slide_id = %s
         """,
         (slide_id,),
@@ -181,9 +210,35 @@ def resolve_slide_path(image_id: str) -> dict[str, Any] | None:
         if result:
             return result
 
-    # 3. Try matching by relative_path suffix
+    # 3. Try matching by relative_path suffix (clinical first, then edu)
     #    image_id "S26-0001/S26-0001_A1_S1.svs" matches
     #    relative_path "2026/S26-0001/S26-0001_A1_S1.svs"
+    result = _fetchone(
+        """
+        SELECT s.slide_id,
+               s.relative_path,
+               s.format,
+               s.stain,
+               s.level_label,
+               s.magnification,
+               s.width_px,
+               s.height_px,
+               s.mpp_x,
+               s.mpp_y,
+               c.case_id,
+               'clinical' AS collection
+          FROM wsi.slides s
+          JOIN wsi.blocks b ON b.id = s.block_id
+          JOIN wsi.parts  p ON p.id = b.part_id
+          JOIN wsi.cases  c ON c.id = p.case_id
+         WHERE s.relative_path LIKE '%%' || %s
+         LIMIT 1
+        """,
+        (image_id,),
+    )
+    if result:
+        return result
+
     return _fetchone(
         """
         SELECT s.slide_id,
@@ -196,11 +251,12 @@ def resolve_slide_path(image_id: str) -> dict[str, Any] | None:
                s.height_px,
                s.mpp_x,
                s.mpp_y,
-               c.case_id
-          FROM wsi.slides s
-          JOIN wsi.blocks b ON b.id = s.block_id
-          JOIN wsi.parts  p ON p.id = b.part_id
-          JOIN wsi.cases  c ON c.id = p.case_id
+               c.case_id,
+               'educational' AS collection
+          FROM wsi_edu.slides s
+          JOIN wsi_edu.blocks b ON b.id = s.block_id
+          JOIN wsi_edu.parts  p ON p.id = b.part_id
+          JOIN wsi_edu.cases  c ON c.id = p.case_id
          WHERE s.relative_path LIKE '%%' || %s
          LIMIT 1
         """,
@@ -297,8 +353,10 @@ def _get_case_diagnosis(case_id: str) -> str | None:
 def get_case(case_id: str) -> dict[str, Any] | None:
     """Get full case details with nested parts -> blocks -> slides.
 
+    Searches clinical (wsi) schema first, then educational (wsi_edu).
     Returns a dict matching the JSON format expected by the API.
     """
+    # Try clinical schema first
     case_row = _fetchone(
         """
         SELECT c.id AS uuid, c.case_id, c.collection, c.specimen_type,
@@ -311,20 +369,43 @@ def get_case(case_id: str) -> dict[str, Any] | None:
         """,
         (case_id,),
     )
-    if case_row is None:
-        return None
+    if case_row is not None:
+        return _build_case_response(case_row, schema='wsi')
 
-    # Fetch all slides for this case
-    slides = _fetchall(
+    # Fallback to educational schema (no patient join)
+    case_row = _fetchone(
         """
+        SELECT c.id AS uuid, c.case_id, c.collection, c.specimen_type,
+               c.clinical_history, c.accession_date, c.status,
+               NULL AS priority,
+               NULL AS patient_mrn, NULL AS patient_name,
+               NULL AS patient_dob, NULL AS patient_sex
+          FROM wsi_edu.cases c
+         WHERE c.case_id = %s
+        """,
+        (case_id,),
+    )
+    if case_row is not None:
+        return _build_case_response(case_row, schema='wsi_edu')
+
+    return None
+
+
+def _build_case_response(
+    case_row: dict[str, Any],
+    schema: str = 'wsi',
+) -> dict[str, Any]:
+    """Build case response dict from a case row and its slides."""
+    slides = _fetchall(
+        f"""
         SELECT s.slide_id, s.relative_path, s.format, s.stain,
                s.level_label, s.magnification, s.width_px, s.height_px,
                s.mpp_x, s.mpp_y,
                p.part_label, p.final_diagnosis,
                b.block_label
-          FROM wsi.slides s
-          JOIN wsi.blocks b ON b.id = s.block_id
-          JOIN wsi.parts  p ON p.id = b.part_id
+          FROM {schema}.slides s
+          JOIN {schema}.blocks b ON b.id = s.block_id
+          JOIN {schema}.parts  p ON p.id = b.part_id
          WHERE p.case_id = %s
          ORDER BY p.part_label, b.block_label, s.slide_id
         """,
@@ -361,7 +442,7 @@ def get_case(case_id: str) -> dict[str, Any] | None:
         'specimenType': case_row['specimen_type'],
         'diagnosis': diagnosis,
         'status': case_row['status'],
-        'priority': case_row['priority'],
+        'priority': case_row.get('priority'),
         'slides': slide_list,
     }
 
@@ -377,8 +458,10 @@ def get_case_slides(case_id: str) -> list[dict[str, Any]] | None:
 def get_slide_with_context(slide_id: str) -> dict[str, Any] | None:
     """Get slide details with case context.
 
+    Searches clinical (wsi) first, then educational (wsi_edu).
     Returns dict matching the format of the /slides/{id} endpoint.
     """
+    # Try clinical schema
     row = _fetchone(
         """
         SELECT s.slide_id, s.relative_path, s.format, s.stain,
@@ -398,6 +481,28 @@ def get_slide_with_context(slide_id: str) -> dict[str, Any] | None:
         """,
         (slide_id,),
     )
+
+    # Fallback to educational schema
+    if row is None:
+        row = _fetchone(
+            """
+            SELECT s.slide_id, s.relative_path, s.format, s.stain,
+                   s.level_label, s.magnification, s.width_px, s.height_px,
+                   s.mpp_x, s.mpp_y,
+                   c.case_id, c.status, NULL AS priority,
+                   NULL AS patient_mrn, NULL AS patient_name,
+                   NULL AS patient_dob, NULL AS patient_sex,
+                   p.part_label, p.final_diagnosis,
+                   b.block_label
+              FROM wsi_edu.slides s
+              JOIN wsi_edu.blocks b ON b.id = s.block_id
+              JOIN wsi_edu.parts  p ON p.id = b.part_id
+              JOIN wsi_edu.cases  c ON c.id = p.case_id
+             WHERE s.slide_id = %s
+            """,
+            (slide_id,),
+        )
+
     if row is None:
         return None
 
@@ -421,7 +526,7 @@ def get_slide_with_context(slide_id: str) -> dict[str, Any] | None:
             'patientDob': patient_dob or '',
             'diagnosis': row['final_diagnosis'],
             'status': row['status'],
-            'priority': row['priority'],
+            'priority': row.get('priority'),
         },
     }
 

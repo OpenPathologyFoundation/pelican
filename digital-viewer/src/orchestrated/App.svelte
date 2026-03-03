@@ -16,7 +16,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { PathologyViewer } from '@pathology/viewer-core';
   import { OrchestratorBridge, type BridgeState } from '@pathology/viewer-core';
-  import type { InitPayload, ViewerAuditEvent } from '@pathology/viewer-core';
+  import type { InitPayload, ViewerAuditEvent, ViewerMode } from '@pathology/viewer-core';
   import { authToken, orchestratorState, authExpired } from '@pathology/viewer-core';
 
   /** Bridge instance */
@@ -36,6 +36,9 @@
 
   /** Current accession number */
   let currentAccession = $state<string | null>(null);
+
+  /** Viewer mode — determines DX features and visual context */
+  let viewerMode = $state<ViewerMode>('clinical');
 
   /** Token expiry timer */
   let tokenExpiryTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -99,6 +102,7 @@
       viewerConfig = payload;
       currentCaseId = payload.caseId;
       currentAccession = payload.accession;
+      viewerMode = payload.mode ?? 'clinical';
 
       // Set auth token in global store
       authToken.set(payload.token);
@@ -239,8 +243,8 @@
         tileServerUrl={viewerConfig.tileServerUrl}
         accessToken={viewerConfig.token}
         initialCaseId={currentCaseId}
-        initialCaseSource="worklist"
-        enableDiagnosticMode="auto"
+        initialCaseSource={viewerMode === 'educational' ? 'external' : 'worklist'}
+        enableDiagnosticMode={viewerMode === 'educational' ? false : 'auto'}
         sessionServiceUrl={viewerConfig.sessionServiceUrl}
         userId={viewerConfig.userId}
         oncasechange={handleCaseChange}
@@ -255,7 +259,9 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
           </svg>
           <span>Viewer paused</span>
-          <span class="blur-overlay__hint">Return to the case to continue</span>
+          <span class="blur-overlay__hint">
+            {viewerMode === 'educational' ? 'Return to the teaching case to continue' : 'Return to the case to continue'}
+          </span>
         </div>
       </div>
     {/if}
