@@ -108,6 +108,10 @@ class ServerSettings(BaseSettings):
         default=None,
         description='Filesystem root for clinical slide collection',
     )
+    storage_edu_root: Path | None = Field(
+        default=None,
+        description='Filesystem root for educational slide collection (wsi_edu schema)',
+    )
 
     # HMAC integrity settings (SDS-STR-001 §5.3)
     hmac_key: str | None = Field(

@@ -123,6 +123,7 @@ export type {
   ViewerMessage,
   InitPayload,
   ViewerAuditEvent,
+  ViewerMode,
 } from './types/orchestrator-messages';
 
 // Tile Source

@@ -439,7 +439,7 @@ def _get_viewer_html() -> str:
         }
 
         async function loadImagesMode() {
-            // Fallback to simple image list if no cases.json
+            // Fallback to simple image list if no cases in database
             try {
                 const response = await fetch('/images');
                 const images = await response.json();

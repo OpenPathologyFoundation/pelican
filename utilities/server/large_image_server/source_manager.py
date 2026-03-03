@@ -76,8 +76,12 @@ class SourceManager:
             from . import db
             slide = db.resolve_slide_path(image_id)
             if slide and slide.get('relative_path'):
-                clinical_root = settings.storage_clinical_root or self._image_dir
-                db_path = Path(clinical_root) / slide['relative_path']
+                # Choose root based on collection (educational vs clinical)
+                if slide.get('collection') == 'educational' and settings.storage_edu_root:
+                    root = settings.storage_edu_root
+                else:
+                    root = settings.storage_clinical_root or self._image_dir
+                db_path = Path(root) / slide['relative_path']
                 if db_path.exists() and db_path.is_file():
                     return db_path.resolve()
 

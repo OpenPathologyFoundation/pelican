@@ -140,6 +140,11 @@
       animationTime: currentConfig.animationTime,
       springStiffness: currentConfig.springStiffness,
 
+      // Tile retry — automatically retry failed tiles instead of permanently
+      // marking them as non-existent (fixes blurry-stays-forever on transient 502s)
+      tileRetryMax: 2,
+      tileRetryDelay: 2500,
+
       // Appearance
       debugMode: currentConfig.debugMode,
       crossOriginPolicy: currentConfig.crossOriginPolicy,
@@ -272,10 +277,10 @@
     // Initialize tile prefetcher (SYS-VWR-005)
     tilePrefetcher = createTilePrefetcher(viewer, {
       enabled: true,
-      prefetchRadius: 2,
+      prefetchRadius: 1,
       prefetchAdjacentLevels: true,
-      settleTime: 200,
-      maxConcurrentRequests: 6,
+      settleTime: 300,
+      maxConcurrentRequests: 4,
     });
 
     // Publish viewer instance to store
@@ -458,7 +463,18 @@
   {:else if $authExpired}
     <ErrorOverlay type="auth-expired" />
   {:else if $tileFailureState.thresholdExceeded}
-    <ErrorOverlay type="tile-failure" />
+    <ErrorOverlay type="tile-failure" onretry={() => {
+      // Reset failure tracker and clear error state
+      tileFailureTracker?.reset();
+      tileFailureState.set({ thresholdExceeded: false, failureRate: 0 });
+      // Force OSD to re-request tiles
+      if (viewer) {
+        const tiledImage = viewer.world.getItemAt(0);
+        if (tiledImage) {
+          (tiledImage as any).reset();
+        }
+      }
+    }} />
   {/if}
 </div>
 

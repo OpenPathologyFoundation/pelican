@@ -254,7 +254,14 @@ Examples:
         type=Path,
         default=None,
         help='Filesystem root for clinical slide collection '
-        '(prepended to slides.relative_path from database)',
+        '(prepended to wsi.slides.relative_path from database)',
+    )
+    parser.add_argument(
+        '--edu-root',
+        type=Path,
+        default=None,
+        help='Filesystem root for educational slide collection '
+        '(prepended to wsi_edu.slides.relative_path from database)',
     )
     parser.add_argument(
         '--hmac-key',
@@ -311,6 +318,11 @@ Examples:
         print(f'Error: Clinical root is not a directory: {args.clinical_root}', file=sys.stderr)
         return 1
 
+    # Validate edu-root if provided
+    if args.edu_root and not args.edu_root.is_dir():
+        print(f'Error: Educational root is not a directory: {args.edu_root}', file=sys.stderr)
+        return 1
+
     # Configure settings
     from .config import configure_settings
 
@@ -333,6 +345,8 @@ Examples:
         config_kwargs['storage_db_url'] = args.db_url
     if args.clinical_root:
         config_kwargs['storage_clinical_root'] = args.clinical_root.resolve()
+    if args.edu_root:
+        config_kwargs['storage_edu_root'] = args.edu_root.resolve()
     if args.hmac_key:
         config_kwargs['hmac_key'] = args.hmac_key
 
@@ -353,6 +367,8 @@ Examples:
         print(f'  Database: ...@{display_url}')
     if args.clinical_root:
         print(f'  Clinical root: {args.clinical_root.resolve()}')
+    if args.edu_root:
+        print(f'  Educational root: {args.edu_root.resolve()}')
     if config_kwargs.get('hmac_key'):
         print('  HMAC: configured')
     print(f'  Server: http://{args.host}:{args.port}')
