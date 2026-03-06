@@ -425,7 +425,7 @@ The `wsi-edu-cases.v1.json` file follows the same structure as clinical case def
 
 - **Annotation versioning:** Should educational annotations support version history (undo/redo) or is simple overwrite sufficient? Current design uses simple overwrite for low friction; version history could be added later if needed.
 - **Cross-collection annotation sharing:** If the same TCGA slide appears in multiple named collections, should annotations be shared or independent per collection? Current design: annotations belong to the slide, not the collection, so they are visible across all collections containing that slide.
-- **Bulk import tooling:** The TCGA manifest-based import (scripts/build-slide-manifests.py → seed data) needs a formal ingestion pipeline for production use. The current scripts are development tooling only.
+- **Bulk import tooling:** ~~Resolved.~~ The manifest-driven batch ingestion pipeline is implemented: `scripts/ingest-manifest.py` reads manifests produced by `build-slide-manifests.py` and uploads slides via `POST /admin/ingest/educational` (SYS-ING-010..017). See `scripts/README.md` for usage.
 - **Examination mode:** Future competency assessment workflows will need the ability to hide all annotations and record student responses. This is deferred to a separate specification.
 
 ## 12. Revision History

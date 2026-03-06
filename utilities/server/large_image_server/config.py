@@ -81,8 +81,8 @@ class ServerSettings(BaseSettings):
         description='Enable CORS middleware',
     )
     cors_origins: list[str] = Field(
-        default=['*'],
-        description='Allowed CORS origins',
+        default=['http://localhost:5173', 'http://localhost:8443'],
+        description='Allowed CORS origins (set to your production domain for deployment)',
     )
     cors_allow_credentials: bool = Field(
         default=False,

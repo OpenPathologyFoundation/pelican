@@ -974,3 +974,321 @@ def get_slide_hmac(slide_id: str) -> dict[str, Any] | None:
         """,
         (slide_id,),
     )
+
+
+# ---------------------------------------------------------------------------
+# Educational (wsi_edu) write helpers — transactional ingestion (SDS-EDU-001)
+# ---------------------------------------------------------------------------
+
+def next_edu_accession(conn, year: int) -> str:
+    """Allocate the next EDU accession number for a given year.
+
+    Queries MAX(case_id) from wsi_edu.cases for the given year prefix,
+    increments the sequence, and returns e.g. 'EDU26-00001'.
+    Uses FOR UPDATE to avoid race conditions.
+    """
+    prefix = f'EDU{year % 100:02d}-'
+    row = _fetchone_conn(
+        conn,
+        """
+        SELECT case_id FROM wsi_edu.cases
+         WHERE case_id LIKE %s
+         ORDER BY case_id DESC
+         LIMIT 1
+         FOR UPDATE
+        """,
+        (prefix + '%',),
+    )
+    if row:
+        last_num = int(row['case_id'].split('-')[1])
+        next_num = last_num + 1
+    else:
+        next_num = 1
+    return f'{prefix}{next_num:05d}'
+
+
+def find_or_create_edu_case(conn, case_id: str | None, year: int, **kwargs) -> dict[str, Any]:
+    """Find existing EDU case or create new one. Returns case row with 'id'.
+
+    If case_id is None, auto-assigns next EDU accession for the year.
+    """
+    if case_id:
+        row = _fetchone_conn(
+            conn,
+            'SELECT id, case_id, collection, source_lineage '
+            'FROM wsi_edu.cases WHERE case_id = %s',
+            (case_id,),
+        )
+        if row:
+            return row
+
+    if not case_id:
+        case_id = next_edu_accession(conn, year)
+
+    import json
+    source_lineage = kwargs.get('source_lineage')
+    source_lineage_json = json.dumps(source_lineage) if source_lineage else '{}'
+
+    return _execute_returning(
+        conn,
+        """
+        INSERT INTO wsi_edu.cases (case_id, collection, specimen_type,
+            clinical_history, accession_date, status, source_lineage, metadata)
+        VALUES (%s, 'educational', %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+        RETURNING id, case_id, collection
+        """,
+        (
+            case_id,
+            kwargs.get('specimen_type'),
+            kwargs.get('clinical_history'),
+            kwargs.get('accession_date'),
+            kwargs.get('status', 'active'),
+            source_lineage_json,
+            '{}',
+        ),
+    )
+
+
+def find_or_create_edu_part(conn, case_uuid, part_label: str, **kwargs) -> dict[str, Any]:
+    """Find existing EDU part or create new one. Returns part row with 'id'."""
+    row = _fetchone_conn(
+        conn,
+        'SELECT id, part_label FROM wsi_edu.parts '
+        'WHERE case_id = %s AND part_label = %s',
+        (case_uuid, part_label),
+    )
+    if row:
+        return row
+
+    return _execute_returning(
+        conn,
+        """
+        INSERT INTO wsi_edu.parts (case_id, part_label, part_designator,
+            anatomic_site, final_diagnosis, provenance)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, part_label
+        """,
+        (
+            case_uuid,
+            part_label,
+            kwargs.get('part_designator'),
+            kwargs.get('anatomic_site'),
+            kwargs.get('final_diagnosis'),
+            kwargs.get('provenance', 'IMPLIED'),
+        ),
+    )
+
+
+def find_or_create_edu_block(conn, part_uuid, block_label: str, **kwargs) -> dict[str, Any]:
+    """Find existing EDU block or create new one. Returns block row with 'id'."""
+    row = _fetchone_conn(
+        conn,
+        'SELECT id, block_label FROM wsi_edu.blocks '
+        'WHERE part_id = %s AND block_label = %s',
+        (part_uuid, block_label),
+    )
+    if row:
+        return row
+
+    return _execute_returning(
+        conn,
+        """
+        INSERT INTO wsi_edu.blocks (part_id, block_label, provenance)
+        VALUES (%s, %s, %s)
+        RETURNING id, block_label
+        """,
+        (
+            part_uuid,
+            block_label,
+            kwargs.get('provenance', 'IMPLIED'),
+        ),
+    )
+
+
+def insert_edu_slide(conn, block_uuid, slide_id: str, relative_path: str,
+                     **kwargs) -> dict[str, Any]:
+    """Insert a new EDU slide record. Raises IntegrityError on duplicate slide_id."""
+    return _execute_returning(
+        conn,
+        """
+        INSERT INTO wsi_edu.slides (
+            block_id, slide_id, relative_path, format, hmac,
+            size_bytes, stain, level_label, magnification,
+            width_px, height_px, mpp_x, mpp_y,
+            scanner, scan_metadata
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+        RETURNING id, slide_id, relative_path, format, hmac,
+                  size_bytes, width_px, height_px, magnification, mpp_x, mpp_y
+        """,
+        (
+            block_uuid,
+            slide_id,
+            relative_path,
+            kwargs.get('format_ext'),
+            kwargs.get('hmac_hex'),
+            kwargs.get('size_bytes'),
+            kwargs.get('stain'),
+            kwargs.get('level_label'),
+            kwargs.get('magnification'),
+            kwargs.get('width_px'),
+            kwargs.get('height_px'),
+            kwargs.get('mpp_x'),
+            kwargs.get('mpp_y'),
+            kwargs.get('scanner'),
+            kwargs.get('scan_metadata_json'),
+        ),
+    )
+
+
+def insert_edu_icd_code(conn, case_uuid, icd_code: str, code_system: str = 'ICD-10',
+                        code_description: str | None = None) -> None:
+    """Insert an ICD code for an EDU case. Ignores duplicates."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO wsi_edu.case_icd_codes
+                (case_id, icd_code, code_system, code_description)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (case_uuid, icd_code, code_system, code_description),
+        )
+
+
+def assign_edu_curator(conn, case_uuid, identity_id: str,
+                       role: str = 'PRIMARY_CURATOR',
+                       assigned_by: str | None = None) -> dict[str, Any] | None:
+    """Assign a curator to an EDU case. Returns curator row or None on dup."""
+    try:
+        return _execute_returning(
+            conn,
+            """
+            INSERT INTO wsi_edu.case_curators
+                (case_id, identity_id, role, assigned_by)
+            VALUES (%s, %s::uuid, %s, %s::uuid)
+            RETURNING id, case_id, identity_id, role
+            """,
+            (case_uuid, identity_id, role, assigned_by),
+        )
+    except Exception:
+        return None
+
+
+def ingest_edu_slide_transactional(
+    year: int,
+    case_id: str | None,
+    part_label: str,
+    block_label: str,
+    slide_id: str,
+    relative_path: str,
+    hmac_hex: str,
+    size_bytes: int,
+    format_ext: str,
+    stain: str | None = None,
+    level_label: str | None = None,
+    magnification: float | None = None,
+    width_px: int | None = None,
+    height_px: int | None = None,
+    mpp_x: float | None = None,
+    mpp_y: float | None = None,
+    scanner: str | None = None,
+    scan_metadata: dict | None = None,
+    specimen_type: str | None = None,
+    accession_date: str | None = None,
+    anatomic_site: str | None = None,
+    primary_diagnosis: str | None = None,
+    icd_code: str | None = None,
+    source_lineage: dict | None = None,
+    curator_identity_id: str | None = None,
+    part_provenance: str = 'IMPLIED',
+    block_provenance: str = 'IMPLIED',
+) -> dict[str, Any]:
+    """Atomic EDU ingestion: auto-accession -> case -> part -> block -> slide.
+
+    All operations in a single transaction. Returns dict with slide row
+    plus the resolved case_id. Raises IntegrityError on duplicate slide_id.
+    """
+    import json
+
+    pool = _get_pool()
+    if pool is None:
+        raise RuntimeError('Database not configured')
+
+    scan_metadata_json = json.dumps(scan_metadata) if scan_metadata else None
+
+    with pool.connection() as conn:
+        conn.autocommit = False
+        try:
+            case_row = find_or_create_edu_case(
+                conn, case_id, year,
+                specimen_type=specimen_type,
+                accession_date=accession_date,
+                source_lineage=source_lineage,
+            )
+
+            part_row = find_or_create_edu_part(
+                conn, case_row['id'], part_label,
+                anatomic_site=anatomic_site,
+                final_diagnosis=primary_diagnosis,
+                provenance=part_provenance,
+            )
+
+            block_row = find_or_create_edu_block(
+                conn, part_row['id'], block_label,
+                provenance=block_provenance,
+            )
+
+            slide_row = insert_edu_slide(
+                conn, block_row['id'], slide_id, relative_path,
+                format_ext=format_ext,
+                hmac_hex=hmac_hex,
+                size_bytes=size_bytes,
+                stain=stain,
+                level_label=level_label,
+                magnification=magnification,
+                width_px=width_px,
+                height_px=height_px,
+                mpp_x=mpp_x,
+                mpp_y=mpp_y,
+                scanner=scanner,
+                scan_metadata_json=scan_metadata_json,
+            )
+
+            if icd_code:
+                insert_edu_icd_code(conn, case_row['id'], icd_code)
+
+            if curator_identity_id:
+                assign_edu_curator(conn, case_row['id'], curator_identity_id)
+
+            conn.commit()
+            return {**slide_row, 'case_id': case_row['case_id']}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def get_edu_slide_by_id(slide_id: str) -> dict[str, Any] | None:
+    """Look up an educational slide by slide_id."""
+    return _fetchone(
+        """
+        SELECT s.slide_id,
+               s.relative_path,
+               s.format,
+               s.stain,
+               s.level_label,
+               s.magnification,
+               s.width_px,
+               s.height_px,
+               s.mpp_x,
+               s.mpp_y,
+               c.case_id,
+               'educational' AS collection
+          FROM wsi_edu.slides s
+          JOIN wsi_edu.blocks b ON b.id = s.block_id
+          JOIN wsi_edu.parts  p ON p.id = b.part_id
+          JOIN wsi_edu.cases  c ON c.id = p.case_id
+         WHERE s.slide_id = %s
+        """,
+        (slide_id,),
+    )

@@ -19,12 +19,15 @@ Or from command line:
 
 """
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+
+logger = logging.getLogger(__name__)
 
 from .auth import CurrentUser, JWTPayload, jwt_bearer
 from .config import ServerSettings, configure_settings, get_settings
@@ -95,6 +98,18 @@ def create_app(
             large_image.config.setConfig('cache_backend', settings.cache_backend)
     except Exception:
         pass
+
+    # Security warnings
+    if not settings.jwt_enabled:
+        logger.warning(
+            'JWT authentication is DISABLED — all tile endpoints are unauthenticated. '
+            'Set LARGE_IMAGE_SERVER_JWT_ENABLED=true for any non-local deployment.'
+        )
+    if settings.cors_origins == ['*']:
+        logger.warning(
+            'CORS allows all origins (*). '
+            'Set LARGE_IMAGE_SERVER_CORS_ORIGINS to restrict in production.'
+        )
 
     # Create FastAPI app
     app = FastAPI(

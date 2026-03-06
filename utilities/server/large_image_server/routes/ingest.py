@@ -1,4 +1,4 @@
-"""Clinical slide ingestion endpoint (SDS-STR-001 §7.1).
+"""Clinical and educational slide ingestion endpoints (SDS-STR-001 §7.1, SDS-EDU-001).
 
 Accepts multipart file uploads, writes slides to year-partitioned
 filesystem, computes HMAC-SHA256, extracts metadata via large_image,
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/admin/ingest', tags=['Ingestion'])
 
 _CASE_ID_RE = re.compile(r'^[A-Za-z]+(\d{2})-\d+$')
+_EDU_CASE_ID_RE = re.compile(r'^EDU(\d{2})-\d{5}$')
 
 
 def _parse_year_from_case_id(case_id: str) -> str:
@@ -513,3 +514,218 @@ async def backfill_metadata() -> dict:
         'skipped': skipped,
         'errors': errors,
     }
+
+
+# ---------------------------------------------------------------------------
+# Educational slide ingestion (SDS-EDU-001, SYS-ING-010..014)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    '/educational',
+    summary='Ingest an educational slide',
+    description='Upload a slide file to the educational collection (wsi_edu schema). '
+    'If case_id is omitted, auto-assigns next EDU accession (e.g. EDU26-00001). '
+    'Creates implied part/block hierarchy. Computes HMAC-SHA256 and extracts metadata.',
+    status_code=201,
+    responses={
+        400: {'description': 'Invalid case_id format or missing file'},
+        409: {'description': 'Duplicate slide_id or file already exists'},
+        503: {'description': 'Database, HMAC key, or EDU storage root not configured'},
+    },
+)
+async def ingest_educational_slide(
+    file: UploadFile,
+    case_id: str | None = Form(default=None),
+    part_label: str = Form(default='A'),
+    block_label: str = Form(default='1'),
+    stain: str | None = Form(default=None),
+    level_label: str | None = Form(default=None),
+    specimen_type: str | None = Form(default=None),
+    accession_date: str | None = Form(default=None),
+    anatomic_site: str | None = Form(default=None),
+    primary_diagnosis: str | None = Form(default=None),
+    icd_code: str | None = Form(default=None),
+    source_type: str | None = Form(
+        default='external_upload',
+        description='Provenance: external_upload, public_dataset, clinical_transfer',
+    ),
+    source_identifier: str | None = Form(default=None),
+    curator_identity_id: str | None = Form(default=None),
+) -> dict:
+    """Ingest an educational slide via multipart upload."""
+    from datetime import datetime, timezone
+
+    settings = get_settings()
+
+    # 1. Validate prerequisites
+    if not db.is_configured():
+        raise HTTPException(status_code=503, detail='Database not configured')
+    if not settings.hmac_key:
+        raise HTTPException(status_code=503, detail='HMAC key not configured')
+    if not settings.storage_edu_root:
+        raise HTTPException(status_code=503, detail='EDU storage root not configured')
+    if not file.filename:
+        raise HTTPException(status_code=400, detail='File has no filename')
+
+    # 2. Validate case_id format if provided
+    if case_id and not _EDU_CASE_ID_RE.match(case_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f'Invalid EDU case_id format: {case_id}. '
+            'Expected pattern like EDU26-00001',
+        )
+
+    # 3. Determine year (from case_id or current date)
+    if case_id:
+        year = 2000 + int(case_id[3:5])
+    else:
+        year = datetime.now(tz=timezone.utc).year
+
+    # 4. Derive identifiers
+    filename = file.filename
+    slide_id = _derive_slide_id(filename)
+    format_ext = _extract_format(filename)
+
+    # 5. Check for duplicate slide_id across both schemas
+    existing = db.get_slide_by_id(slide_id)
+    if not existing:
+        existing = db.get_edu_slide_by_id(slide_id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f'Slide already exists in database: {slide_id}',
+        )
+
+    # 6. For auto-assign: write file to staging, rename after accession known
+    #    For explicit case_id: write directly to final path
+    edu_root = settings.storage_edu_root
+
+    if case_id:
+        relative_path = f'{year}/{case_id}/{filename}'
+        target_path = edu_root / relative_path
+        if target_path.exists():
+            raise HTTPException(
+                status_code=409,
+                detail=f'File already exists on disk: {relative_path}',
+            )
+    else:
+        target_path = None
+
+    # 7. Write file atomically
+    staging_dir = edu_root / '_staging'
+    try:
+        if target_path:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path = target_path.parent / f'{filename}.tmp'
+        else:
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            write_path = staging_dir / f'{slide_id}.tmp'
+
+        with open(write_path, 'wb') as f:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+        if target_path:
+            os.rename(write_path, target_path)
+            hmac_source = target_path
+        else:
+            hmac_source = write_path
+    except Exception as e:
+        for p in (write_path, target_path):
+            if p and p.exists():
+                p.unlink()
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to write file: {e}',
+        ) from e
+
+    # 8. Compute HMAC and extract metadata
+    try:
+        size_bytes = hmac_source.stat().st_size
+        hmac_hex = compute_file_hmac(hmac_source, settings.hmac_key)
+        image_meta = _extract_metadata(hmac_source)
+
+        # Build source lineage
+        source_lineage = {'type': source_type or 'external_upload'}
+        if source_identifier:
+            source_lineage['identifier'] = source_identifier
+
+        # 9. Insert into database transactionally
+        slide_row = db.ingest_edu_slide_transactional(
+            year=year,
+            case_id=case_id,
+            part_label=part_label,
+            block_label=block_label,
+            slide_id=slide_id,
+            relative_path='_pending_',  # placeholder — updated below
+            hmac_hex=hmac_hex,
+            size_bytes=size_bytes,
+            format_ext=format_ext,
+            stain=stain,
+            level_label=level_label,
+            magnification=image_meta.get('magnification'),
+            width_px=image_meta.get('width_px'),
+            height_px=image_meta.get('height_px'),
+            mpp_x=image_meta.get('mpp_x'),
+            mpp_y=image_meta.get('mpp_y'),
+            scanner=image_meta.get('scanner'),
+            specimen_type=specimen_type,
+            accession_date=accession_date,
+            anatomic_site=anatomic_site,
+            primary_diagnosis=primary_diagnosis,
+            icd_code=icd_code,
+            source_lineage=source_lineage,
+            curator_identity_id=curator_identity_id,
+        )
+
+        # 10. Finalize file path with resolved case_id
+        resolved_case_id = slide_row['case_id']
+        final_relative_path = f'{year}/{resolved_case_id}/{filename}'
+        final_target = edu_root / final_relative_path
+
+        if not case_id:
+            # Auto-assigned — move from staging to final location
+            final_target.parent.mkdir(parents=True, exist_ok=True)
+            os.rename(hmac_source, final_target)
+
+        # 11. Update the relative_path in the database
+        pool = db._get_pool()
+        with pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE wsi_edu.slides SET relative_path = %s '
+                    'WHERE slide_id = %s',
+                    (final_relative_path, slide_id),
+                )
+
+        return {
+            'slideId': slide_row['slide_id'],
+            'caseId': resolved_case_id,
+            'relativePath': final_relative_path,
+            'hmac': slide_row['hmac'],
+            'sizeBytes': slide_row['size_bytes'],
+            'widthPx': slide_row.get('width_px'),
+            'heightPx': slide_row.get('height_px'),
+            'magnification': slide_row.get('magnification'),
+            'mppX': slide_row.get('mpp_x'),
+            'mppY': slide_row.get('mpp_y'),
+            'autoAssigned': case_id is None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Clean up files on any post-write failure
+        for p in (hmac_source, target_path):
+            try:
+                if p and p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        logger.error('EDU ingestion failed for %s: %s', slide_id, e)
+        raise HTTPException(
+            status_code=500,
+            detail=f'EDU ingestion failed: {e}',
+        ) from e
