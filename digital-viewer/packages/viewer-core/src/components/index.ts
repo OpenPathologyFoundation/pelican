@@ -8,6 +8,7 @@
 export { default as Viewer } from './Viewer.svelte';
 export { default as ScaleBar } from './ScaleBar.svelte';
 export { default as ViewerToolbar } from './ViewerToolbar.svelte';
+export { default as FrameNavigator } from './FrameNavigator.svelte';
 export { default as SlideInfo } from './SlideInfo.svelte';
 
 // FDP components

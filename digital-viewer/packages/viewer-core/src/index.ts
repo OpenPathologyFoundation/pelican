@@ -126,6 +126,9 @@ export type {
   ViewerMode,
 } from './types/orchestrator-messages';
 
+// Frame navigation store
+export { currentFrameIndex } from './stores';
+
 // Tile Source
 export { TileSourceFactory, fetchSlideMetadata } from './tile-source';
 
@@ -150,6 +153,8 @@ export type {
   AnnotationType,
   CalibrationState,
   CaseContext,
+  FrameIndexRange,
+  FrameInfo,
   MppSource,
   NavigationAction,
   OSDViewer,

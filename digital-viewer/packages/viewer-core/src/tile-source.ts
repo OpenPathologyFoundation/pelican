@@ -5,7 +5,7 @@
  */
 
 import type OpenSeadragon from 'openseadragon';
-import type { SlideMetadata, TileSourceConfig, ViewerConfig } from './types';
+import type { FrameInfo, FrameIndexRange, SlideMetadata, TileSourceConfig, ViewerConfig } from './types';
 
 /** Fetch slide metadata from large_image server */
 export async function fetchSlideMetadata(
@@ -41,6 +41,26 @@ export async function fetchSlideMetadata(
     mppSource = 'scanner';
   }
 
+  // Extract multi-frame info (e.g. Z-stack OME-TIFF)
+  const serverFrames: Array<Record<string, unknown>> | undefined = data.frames;
+  const frameCount = serverFrames?.length ?? 1;
+
+  let frames: FrameInfo[] | undefined;
+  let frameIndexRange: FrameIndexRange | undefined;
+  let channels: string[] | undefined;
+
+  if (frameCount > 1 && serverFrames) {
+    frames = serverFrames.map((f) => ({
+      index: f.Frame as number,
+      indexC: f.IndexC as number | undefined,
+      indexZ: f.IndexZ as number | undefined,
+      indexT: f.IndexT as number | undefined,
+      channel: f.Channel as string | undefined,
+    }));
+    frameIndexRange = data.IndexRange as FrameIndexRange | undefined;
+    channels = data.channels as string[] | undefined;
+  }
+
   return {
     slideId,
     width: data.sizeX,
@@ -54,6 +74,10 @@ export async function fetchSlideMetadata(
     calibrationState,
     format: data.format,
     vendor: data.vendor,
+    frameCount,
+    frames,
+    frameIndexRange,
+    channels,
     properties: data,
   };
 }
@@ -62,7 +86,8 @@ export async function fetchSlideMetadata(
 export function createLargeImageTileSource(
   config: ViewerConfig,
   slideId: string,
-  metadata: SlideMetadata
+  metadata: SlideMetadata,
+  getFrame?: () => number
 ): OpenSeadragon.TileSource {
   return {
     width: metadata.width,
@@ -73,11 +98,10 @@ export function createLargeImageTileSource(
     maxLevel: metadata.levels - 1,
 
     getTileUrl(level: number, x: number, y: number): string {
-      // large_image uses inverse level numbering (0 = highest resolution)
-      // OpenSeadragon uses 0 = lowest resolution
-      // Calculate the correct level for large_image
-      const liLevel = metadata.levels - 1 - level;
-      return `${config.tileServerUrl}/tile/${slideId}/${liLevel}/${x}/${y}`;
+      // The /tiles/ endpoint uses the same convention as OSD: z=0 is lowest resolution
+      const frame = getFrame?.() ?? 0;
+      const frameParam = frame > 0 ? `?frame=${frame}` : '';
+      return `${config.tileServerUrl}/tiles/${slideId}/${level}/${x}/${y}.png${frameParam}`;
     },
   } as OpenSeadragon.TileSource;
 }
@@ -85,10 +109,12 @@ export function createLargeImageTileSource(
 /** Create tile source from DZI XML */
 export function createDZITileSource(
   config: ViewerConfig,
-  slideId: string
+  slideId: string,
+  frame?: number
 ): string {
   // URL-encode the slideId to handle paths with slashes (e.g., S26-0001/S26-0001_A1_S1.svs)
-  return `${config.tileServerUrl}/deepzoom/${encodeURIComponent(slideId)}.dzi`;
+  const frameParam = frame && frame > 0 ? `?frame=${frame}` : '';
+  return `${config.tileServerUrl}/deepzoom/${encodeURIComponent(slideId)}.dzi${frameParam}`;
 }
 
 /** Create XYZ tile source */
@@ -121,6 +147,7 @@ export function createIIIFTileSource(baseUrl: string): string {
 export class TileSourceFactory {
   private config: ViewerConfig;
   private accessToken: string | null = null;
+  private frameGetter: (() => number) | undefined;
   private metadataCache: Map<string, SlideMetadata> = new Map();
 
   constructor(config: ViewerConfig) {
@@ -137,6 +164,11 @@ export class TileSourceFactory {
     return this.accessToken;
   }
 
+  /** Set the frame getter for multi-frame tile URL construction */
+  setFrameGetter(getter: () => number): void {
+    this.frameGetter = getter;
+  }
+
   /** Create tile source for a slide */
   async createTileSource(
     slideId: string,
@@ -149,11 +181,13 @@ export class TileSourceFactory {
       this.metadataCache.set(slideId, metadata);
     }
 
+    const frame = this.frameGetter?.() ?? 0;
+
     let tileSource: OpenSeadragon.TileSource | string;
 
     switch (type) {
       case 'dzi':
-        tileSource = createDZITileSource(this.config, slideId);
+        tileSource = createDZITileSource(this.config, slideId, frame);
         break;
 
       case 'xyz':
@@ -168,11 +202,22 @@ export class TileSourceFactory {
 
       case 'large-image':
       default:
-        tileSource = createLargeImageTileSource(this.config, slideId, metadata);
+        tileSource = createLargeImageTileSource(
+          this.config, slideId, metadata, this.frameGetter
+        );
         break;
     }
 
     return { tileSource, metadata };
+  }
+
+  /** Create DZI tile source synchronously using cached metadata (for frame switching) */
+  createTileSourceSync(
+    slideId: string,
+    frame: number
+  ): { tileSource: OpenSeadragon.TileSource | string } {
+    const tileSource = createDZITileSource(this.config, slideId, frame);
+    return { tileSource };
   }
 
   /** Get cached metadata */

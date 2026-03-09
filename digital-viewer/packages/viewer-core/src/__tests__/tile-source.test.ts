@@ -50,7 +50,7 @@ describe('TileSourceFactory', () => {
         }),
       });
 
-      const { tileSource, metadata } = await factory.createTileSource('test-slide');
+      const { tileSource, metadata } = await factory.createTileSource('test-slide', 'large-image');
 
       expect(metadata.width).toBe(50000);
       expect(metadata.height).toBe(40000);

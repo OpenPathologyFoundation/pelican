@@ -165,6 +165,9 @@ export const visibleLayers: Readable<OverlayLayer[]> = derived(
   ($overlayLayers) => $overlayLayers.filter((l) => l.visible)
 );
 
+/** Current frame index for multi-frame images (0-based) */
+export const currentFrameIndex: Writable<number> = writable(0);
+
 /** Authentication token for tile server requests (SRS SYS-INT-002) */
 export const authToken: Writable<string | null> = writable(null);
 
@@ -201,6 +204,7 @@ export function resetViewerState(): void {
   selectedAnnotationId.set(null);
   activeDrawingTool.set(null);
   overlayLayers.set([]);
+  currentFrameIndex.set(0);
   tileFailureState.set({ thresholdExceeded: false, failureRate: 0 });
   authExpired.set(false);
   // Note: authToken and orchestratorState are NOT reset here —

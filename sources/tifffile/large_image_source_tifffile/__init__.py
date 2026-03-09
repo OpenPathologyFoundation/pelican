@@ -631,9 +631,11 @@ class TifffileFileTileSource(FileTileSource, metaclass=LruCacheMetaclass):
         za, hasgbs = self._getZarrArray(series, sidx)
         xidx = series.axes.index('X')
         yidx = series.axes.index('Y')
+        za0 = self._zarrGet(za, 0)
         for ll in range(1, len(series.levels)):
-            scale = round(math.log(max(za[0].shape[xidx] / za[ll].shape[xidx],
-                                       za[0].shape[yidx] / za[ll].shape[yidx])) / math.log(2))
+            zall = self._zarrGet(za, ll)
+            scale = round(math.log(max(za0.shape[xidx] / zall.shape[xidx],
+                                       za0.shape[yidx] / zall.shape[yidx])) / math.log(2))
             if 0 < scale < self.levels:
                 nonempty[self.levels - 1 - int(scale)] = True
         if not hasattr(self, '_nonempty_levels_list'):
@@ -652,13 +654,22 @@ class TifffileFileTileSource(FileTileSource, metaclass=LruCacheMetaclass):
         """
         return max(0, min(level, self.levels - 1))
 
+    @staticmethod
+    def _zarrGet(za, key):
+        """Access a zarr group member by integer key, compatible with both
+        zarr v2 (accepts int) and zarr v3 (requires str)."""
+        try:
+            return za[key]
+        except TypeError:
+            return za[str(key)]
+
     def _getZarrArray(self, series, sidx):
         with self._zarrlock:
             if sidx not in self._zarrcache:
                 if len(self._zarrcache) > 10:
                     self._zarrcache = {}
                 za = zarr.open(series.aszarr(), mode='r')
-                hasgbs = hasattr(za[0], 'get_basic_selection')
+                hasgbs = hasattr(self._zarrGet(za, 0), 'get_basic_selection')
                 if not hasgbs and math.prod(series.shape) < 256 * 1024 ** 2:
                     za = series.asarray()
                 self._zarrcache[sidx] = (za, hasgbs)
@@ -679,13 +690,14 @@ class TifffileFileTileSource(FileTileSource, metaclass=LruCacheMetaclass):
         xidx = series.axes.index('X')
         yidx = series.axes.index('Y')
         if hasgbs:
-            bza = za[0]
+            bza = self._zarrGet(za, 0)
             # we could cache this
             for ll in range(len(series.levels) - 1, 0, -1):
-                scale = round(max(za[0].shape[xidx] / za[ll].shape[xidx],
-                                  za[0].shape[yidx] / za[ll].shape[yidx]))
+                zall = self._zarrGet(za, ll)
+                scale = round(max(bza.shape[xidx] / zall.shape[xidx],
+                                  bza.shape[yidx] / zall.shape[yidx]))
                 if scale <= step and step // scale == step / scale:
-                    bza = za[ll]
+                    bza = zall
                     x0 //= scale
                     x1 //= scale
                     y0 //= scale

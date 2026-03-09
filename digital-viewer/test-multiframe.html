@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-Frame OME-TIFF Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; color: #eee; font-family: monospace; height: 100vh; display: flex; flex-direction: column; }
+    #viewer { flex: 1; }
+    #controls { padding: 8px 16px; background: #222; display: flex; gap: 16px; align-items: center; font-size: 13px; }
+    #controls button { padding: 4px 12px; background: #444; color: #eee; border: 1px solid #666; border-radius: 4px; cursor: pointer; }
+    #controls button:hover { background: #555; }
+    #controls button:disabled { opacity: 0.3; cursor: default; }
+    #status { color: #888; }
+    #frame-label { color: #4af; font-weight: bold; }
+    #tile-log { position: fixed; bottom: 40px; right: 8px; background: rgba(0,0,0,0.85); padding: 8px; border-radius: 4px; font-size: 10px; max-height: 200px; overflow-y: auto; width: 400px; z-index: 100; }
+    .log-ok { color: #4a4; }
+    .log-fail { color: #f44; }
+    .log-info { color: #88f; }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <div id="controls">
+    <button id="prev" disabled>[ Prev</button>
+    <span id="frame-label">1/1</span>
+    <button id="next" disabled>Next ]</button>
+    <span id="status">Loading metadata...</span>
+  </div>
+  <div id="tile-log"></div>
+
+  <script src="/node_modules/openseadragon/build/openseadragon/openseadragon.min.js"></script>
+  <script>
+    const TILE_SERVER = '/api';
+    const SLIDE_ID = new URLSearchParams(location.search).get('slide') || 'KID-MED-034.ome.tif';
+
+    let currentFrame = 0;
+    let frameCount = 1;
+    let metadata = null;
+    let viewer = null;
+
+    const statusEl = document.getElementById('status');
+    const frameLabelEl = document.getElementById('frame-label');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const tileLog = document.getElementById('tile-log');
+
+    let tileOk = 0, tileFail = 0;
+
+    function log(msg, cls) {
+      const div = document.createElement('div');
+      div.className = cls || 'log-info';
+      div.textContent = msg;
+      tileLog.prepend(div);
+      if (tileLog.children.length > 50) tileLog.lastChild.remove();
+    }
+
+    async function init() {
+      // 1. Fetch metadata
+      try {
+        const res = await fetch(`${TILE_SERVER}/metadata/${encodeURIComponent(SLIDE_ID)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        metadata = await res.json();
+      } catch (e) {
+        statusEl.textContent = `Metadata error: ${e.message}`;
+        return;
+      }
+
+      frameCount = metadata.frames?.length || 1;
+      statusEl.textContent = `${metadata.sizeX}x${metadata.sizeY}, ${metadata.levels} lvl, ${frameCount} frames, ${metadata.magnification}x`;
+      updateFrameUI();
+
+      // 2. Create OSD viewer using DZI (natively supported by OSD)
+      const dziUrl = `${TILE_SERVER}/deepzoom/${encodeURIComponent(SLIDE_ID)}.dzi` +
+        (currentFrame > 0 ? `?frame=${currentFrame}` : '');
+
+      log(`Opening DZI: ${dziUrl}`, 'log-info');
+
+      viewer = OpenSeadragon({
+        element: document.getElementById('viewer'),
+        showNavigator: true,
+        showNavigationControl: true,
+        crossOriginPolicy: false,
+        prefixUrl: '/node_modules/openseadragon/build/openseadragon/images/',
+        tileSources: dziUrl,
+      });
+
+      viewer.addHandler('tile-loaded', (e) => {
+        tileOk++;
+        if (tileOk <= 5 || tileOk % 20 === 0) {
+          log(`OK tiles: ${tileOk} (fail: ${tileFail})`, 'log-ok');
+        }
+      });
+
+      viewer.addHandler('tile-load-failed', (e) => {
+        tileFail++;
+        log(`FAIL tile L${e.tile?.level} (${e.tile?.x},${e.tile?.y}) [${tileOk}ok/${tileFail}fail]`, 'log-fail');
+      });
+
+      viewer.addHandler('open', () => {
+        log('Viewer opened!', 'log-ok');
+      });
+
+      viewer.addHandler('open-failed', (e) => {
+        log(`Open failed: ${e.message}`, 'log-fail');
+      });
+    }
+
+    function updateFrameUI() {
+      frameLabelEl.textContent = `${currentFrame + 1}/${frameCount}`;
+      prevBtn.disabled = currentFrame <= 0;
+      nextBtn.disabled = currentFrame >= frameCount - 1;
+    }
+
+    function changeFrame(delta) {
+      const next = currentFrame + delta;
+      if (next < 0 || next >= frameCount) return;
+      currentFrame = next;
+      updateFrameUI();
+      tileOk = 0;
+      tileFail = 0;
+
+      // Save viewport, reload with new DZI, restore viewport
+      const savedBounds = viewer.viewport.getBounds(true);
+      const dziUrl = `${TILE_SERVER}/deepzoom/${encodeURIComponent(SLIDE_ID)}.dzi` +
+        (currentFrame > 0 ? `?frame=${currentFrame}` : '');
+      log(`Switching to frame ${currentFrame}`, 'log-info');
+
+      const restore = () => {
+        viewer.viewport.fitBounds(savedBounds, true);
+        viewer.removeHandler('open', restore);
+      };
+      viewer.addHandler('open', restore);
+      viewer.open(dziUrl);
+    }
+
+    prevBtn.addEventListener('click', () => changeFrame(-1));
+    nextBtn.addEventListener('click', () => changeFrame(1));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '[') changeFrame(-1);
+      if (e.key === ']') changeFrame(1);
+    });
+
+    init();
+  </script>
+</body>
+</html>
