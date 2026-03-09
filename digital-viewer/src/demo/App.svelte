@@ -4,12 +4,19 @@
    *
    * Demonstrates the PathologyViewer component with FDP integration
    * Updated for Svelte 5 with runes
+   *
+   * Direct slide mode: add ?slide=FILENAME to the URL to bypass
+   * the case search and load a single image file directly.
+   * Example: http://localhost:5173/?slide=KID-MED-034.ome.tif
    */
 
   import { PathologyViewer } from '@pathology/viewer-core';
 
   // Configuration - use /api proxy in dev to avoid CORS issues
   const TILE_SERVER_URL = import.meta.env.VITE_TILE_SERVER_URL || '/api';
+
+  // Direct slide mode: ?slide=filename bypasses case search
+  const directSlideId = new URLSearchParams(window.location.search).get('slide');
 
   /** State */
   let diagnosticMode = $state(false);
@@ -36,38 +43,38 @@
   }
 </script>
 
-<div class="demo-app">
-  <!-- Mode toggles in corner -->
-  <div class="demo-controls">
-    <button
-      class="demo-toggle"
-      class:active={diagnosticMode}
-      onclick={toggleDiagnosticMode}
-      title="Toggle Diagnostic Mode"
-    >
-      DX
-    </button>
-    <button
-      class="demo-toggle"
-      class:active={privacyMode}
-      onclick={togglePrivacyMode}
-      title="Toggle Privacy Mode"
-    >
-      Privacy
-    </button>
-    <a class="demo-link" href="/basic" title="Basic Viewer Demo">
-      Basic
-    </a>
-  </div>
+  <div class="demo-app">
+    <div class="demo-controls">
+      <button
+        class="demo-toggle"
+        class:active={diagnosticMode}
+        onclick={toggleDiagnosticMode}
+        title="Toggle Diagnostic Mode"
+      >
+        DX
+      </button>
+      <button
+        class="demo-toggle"
+        class:active={privacyMode}
+        onclick={togglePrivacyMode}
+        title="Toggle Privacy Mode"
+      >
+        Privacy
+      </button>
+      <a class="demo-link" href="/basic" title="Basic Viewer Demo">
+        Basic
+      </a>
+    </div>
 
-  <PathologyViewer
-    tileServerUrl={TILE_SERVER_URL}
-    enableDiagnosticMode={diagnosticMode}
-    enablePrivacyMode={privacyMode}
-    oncasechange={handleCaseChange}
-    onslidechange={handleSlideChange}
-  />
-</div>
+    <PathologyViewer
+      tileServerUrl={TILE_SERVER_URL}
+      directSlideId={directSlideId}
+      enableDiagnosticMode={diagnosticMode}
+      enablePrivacyMode={privacyMode}
+      oncasechange={handleCaseChange}
+      onslidechange={handleSlideChange}
+    />
+  </div>
 
 <style>
   .demo-app {
@@ -125,4 +132,5 @@
     background: rgba(26, 26, 46, 1);
     color: #ccc;
   }
+
 </style>

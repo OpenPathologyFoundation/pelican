@@ -16,6 +16,7 @@
     viewerConfig,
     slideMetadata,
     currentSlideId,
+    currentFrameIndex,
     viewportState,
     viewerReady,
     isLoading,
@@ -164,6 +165,7 @@
 
     // Create tile source factory and sync auth token
     tileSourceFactory = new TileSourceFactory(currentConfig);
+    tileSourceFactory.setFrameGetter(() => get(currentFrameIndex));
     if (currentToken) {
       tileSourceFactory.setAccessToken(currentToken);
     }
@@ -296,10 +298,12 @@
     isLoading.set(true);
     viewerError.set(null);
     currentSlideId.set(id);
+    currentFrameIndex.set(0);
 
     try {
       const { tileSource, metadata } = await tileSourceFactory.createTileSource(id);
       slideMetadata.set(metadata);
+      lastOpenedFrame = 0; // prevent effect from re-opening frame 0
 
       viewer.open(tileSource);
     } catch (error) {
@@ -367,6 +371,7 @@
   /** Lifecycle */
   onMount(() => {
     initViewer();
+    document.addEventListener('keydown', handleFrameKeydown);
 
     // Track container size for overlays
     if (containerEl) {
@@ -389,6 +394,7 @@
   });
 
   onDestroy(() => {
+    document.removeEventListener('keydown', handleFrameKeydown);
     resizeObserver?.disconnect();
     tilePrefetcher?.destroy();
     tilePrefetcher = null;
@@ -433,6 +439,55 @@
       tileSourceFactory.setAccessToken(token);
     }
   });
+
+  /** Effect: Re-open DZI with new frame when frame index changes, preserving viewport */
+  let lastOpenedFrame = -1;
+  $effect(() => {
+    const frame = $currentFrameIndex;
+    const metadata = $slideMetadata;
+    const id = $currentSlideId;
+    // Only act on multi-frame images after the viewer is ready
+    if (!viewer || !tileSourceFactory || !metadata || !id || (metadata.frameCount ?? 1) <= 1) return;
+    // Skip if this frame was already opened (e.g. initial load opens frame 0)
+    if (frame === lastOpenedFrame) return;
+    lastOpenedFrame = frame;
+
+    // Save current viewport state before re-opening
+    const savedBounds = viewer.viewport.getBounds(true);
+    const savedRotation = viewer.viewport.getRotation();
+
+    // Re-open the tile source with the new frame parameter
+    const { tileSource } = tileSourceFactory.createTileSourceSync(id, frame);
+
+    // Restore viewport after the new frame loads
+    const restoreHandler = () => {
+      viewer!.viewport.fitBounds(savedBounds, true);
+      viewer!.viewport.setRotation(savedRotation);
+      viewer!.removeHandler('open', restoreHandler);
+    };
+    viewer.addHandler('open', restoreHandler);
+
+    viewer.open(tileSource);
+  });
+
+  /** Keyboard handler for frame navigation */
+  function handleFrameKeydown(e: KeyboardEvent): void {
+    const metadata = $slideMetadata;
+    if (!metadata || (metadata.frameCount ?? 1) <= 1) return;
+    // Ignore when typing in inputs
+    if ((e.target as HTMLElement)?.tagName === 'INPUT' ||
+        (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+    const frame = get(currentFrameIndex);
+    if (e.key === '[' && frame > 0) {
+      e.preventDefault();
+      currentFrameIndex.set(frame - 1);
+    } else if (e.key === ']' && frame < (metadata.frameCount ?? 1) - 1) {
+      e.preventDefault();
+      currentFrameIndex.set(frame + 1);
+    }
+  }
+
+
 </script>
 
 <div class="viewer-container" bind:this={containerEl}>

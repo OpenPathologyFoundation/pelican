@@ -65,6 +65,7 @@
   import ViewerToolsPanel from './ViewerToolsPanel.svelte';
   import ShortcutsHelp from './ShortcutsHelp.svelte';
   import BookmarkPanel from './BookmarkPanel.svelte';
+  import FrameNavigator from './FrameNavigator.svelte';
   import { handleKeydown, showShortcutsHelp } from '../stores/shortcuts';
   import type { ShortcutAction } from '../types/shortcuts';
   import { createBookmark, toggleBookmarkPanel, bookmarkPanelVisible, goToNextBookmark, goToPreviousBookmark } from '../stores/bookmark';
@@ -89,6 +90,8 @@
     initialCaseId?: string | null;
     /** Initial slide ID to load */
     initialSlideId?: string | null;
+    /** Direct slide file path — bypasses case loading, shows full UI with a raw image file */
+    directSlideId?: string | null;
     /** Enable diagnostic mode (defaults to auto based on case source per SRS SYS-DXM-001) */
     enableDiagnosticMode?: boolean | 'auto';
     /** Enable privacy mode */
@@ -116,6 +119,7 @@
     accessToken = null,
     initialCaseId = null,
     initialSlideId = null,
+    directSlideId = null,
     enableDiagnosticMode = 'auto',
     enablePrivacyMode = false,
     initialCaseSource = 'search',
@@ -455,6 +459,8 @@
 
   /** Computed: Get slide file path for viewer (format: caseId/filename) */
   let currentSlidePath = $derived.by(() => {
+    // Direct slide mode: bypass case lookup, use raw file path
+    if (directSlideId) return directSlideId;
     if (!currentCase || !selectedSlideId) return null;
     const slide = slides.find((s) => s.slideId === selectedSlideId);
     if (!slide) return null;
@@ -649,6 +655,11 @@
               }
             }}
           />
+
+          <!-- Frame Navigator (multi-page OME-TIFF, Z-stacks) -->
+          <div class="frame-navigator-container">
+            <FrameNavigator />
+          </div>
 
           <!-- Help Button -->
           <button
@@ -853,6 +864,15 @@
   .pathology-viewer__no-slide p {
     margin: 0;
     font-size: 1rem;
+  }
+
+  /* Frame Navigator (bottom center) */
+  .frame-navigator-container {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
   }
 
   /* Help Button */

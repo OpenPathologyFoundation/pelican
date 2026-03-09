@@ -28,6 +28,22 @@ export type CalibrationState =
 /** MPP source */
 export type MppSource = 'scanner' | 'manual';
 
+/** Frame metadata for multi-page/multi-frame images (e.g. Z-stack OME-TIFF) */
+export interface FrameInfo {
+  index: number;       // 0-based frame index
+  indexC?: number;     // Channel index
+  indexZ?: number;     // Z-stack index
+  indexT?: number;     // Time point index
+  channel?: string;    // Channel name (e.g. 'DAPI', 'GFP')
+}
+
+/** Frame dimension ranges (how many unique values per axis) */
+export interface FrameIndexRange {
+  IndexC?: number;
+  IndexZ?: number;
+  IndexT?: number;
+}
+
 /** Slide metadata */
 export interface SlideMetadata {
   slideId: string;
@@ -50,6 +66,11 @@ export interface SlideMetadata {
   specimenPart?: string; // Specimen part identifier
   blockId?: string; // Block identifier
   stain?: string; // Stain type
+  // Multi-frame support (e.g. Z-stack OME-TIFF)
+  frameCount?: number;  // Total frames (1 for single-frame images, omitted or 1 if not multi-frame)
+  frames?: FrameInfo[]; // Frame details (omitted when single-frame)
+  frameIndexRange?: FrameIndexRange; // Dimension ranges
+  channels?: string[]; // Channel names
   properties?: Record<string, unknown>;
 }
 
