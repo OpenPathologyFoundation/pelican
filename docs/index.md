@@ -53,13 +53,13 @@ For a detailed summary of all modifications made in this fork, see
 
 ``` bash
 # Core library with common image format support
-pip install large-image[common]
+pip install 'large-image[common]'
 
 # With tile server
-pip install large-image[common] large-image-server
+pip install 'large-image[common]' large-image-server
 
 # All formats (Linux only, requires additional system libraries)
-pip install large-image[all] --find-links https://girder.github.io/large_image_wheels
+pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
 ```
 
 ### Python Usage
@@ -106,11 +106,11 @@ large_image_server --image-dir /path/to/images --port 8000
 
 Install with common tile sources (works on Linux, macOS, Windows):
 
-    pip install large-image[common]
+    pip install 'large-image[common]'
 
 Install all tile sources on Linux:
 
-    pip install large-image[all] --find-links https://girder.github.io/large_image_wheels
+    pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
 
 ### Conda
 
@@ -191,7 +191,7 @@ server.
 ### Installation
 
 ``` bash
-pip install large-image-server[all]
+pip install 'large-image-server[all]'
 ```
 
 ### Running
@@ -302,9 +302,9 @@ Setting up a development environment:
     source .venv/bin/activate
 
     # Install in development mode
-    pip install -e .[common]
-    pip install -e utilities/server[all]
-    pip install -e utilities/converter[all]
+    pip install -e '.[common]'
+    pip install -e 'utilities/server[common,jwt,db]'
+    pip install -e 'utilities/converter[all]'
 
 Running tests:
 
@@ -313,7 +313,7 @@ Running tests:
 
     # Server tests
     cd utilities/server
-    pip install -e .[test]
+    pip install -e '.[test]'
     pytest tests/
 
     # Digital viewer tests

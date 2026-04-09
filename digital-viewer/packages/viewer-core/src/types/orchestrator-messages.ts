@@ -2,10 +2,10 @@
  * Orchestrator Bridge Message Protocol
  *
  * Defines the typed postMessage protocol between the orchestrator
- * (Okapi web-client) and the viewer (digital-viewer) windows.
+ * (Starling web-client) and the viewer (digital-viewer) windows.
  *
  * NOTE: This file is kept in sync with the orchestrator's copy at:
- *   Okapi/web-client/src/lib/types/viewer-bridge.ts
+ *   starling/web-client/src/lib/types/viewer-bridge.ts
  *
  * Security: All messages are validated by origin before processing.
  */

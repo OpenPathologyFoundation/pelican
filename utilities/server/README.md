@@ -26,10 +26,10 @@ including pathology whole slide images (WSI).
 pip install large-image-server
 
 # With common image format support
-pip install large-image-server[common]
+pip install 'large-image-server[common]'
 
 # With all format sources
-pip install large-image-server[all]
+pip install 'large-image-server[all]'
 ```
 
 ## Quick Start

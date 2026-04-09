@@ -21,11 +21,11 @@ the main project with one of these commands:
 
 Install common tile sources on linux, OSX, or Windows:
 
-    pip install large-image[common]
+    pip install 'large-image[common]'
 
 Install all tile sources on linux:
 
-    pip install large-image[all] --find-links https://girder.github.io/large_image_wheels
+    pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
 
 ### Conda
 

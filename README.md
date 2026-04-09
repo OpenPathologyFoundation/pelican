@@ -87,13 +87,13 @@ other systems.
 
 ``` bash
 # Core library with common image format support
-pip install large-image[common]
+pip install 'large-image[common]'
 
 # With tile server
-pip install large-image[common] large-image-server
+pip install 'large-image[common]' large-image-server
 
 # All formats (Linux only, requires additional system libraries)
-pip install large-image[all] --find-links https://girder.github.io/large_image_wheels
+pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
 ```
 
 ### Python Usage
@@ -140,11 +140,11 @@ large_image_server --image-dir /path/to/images --port 8000
 
 Install with common tile sources (works on Linux, macOS, Windows):
 
-    pip install large-image[common]
+    pip install 'large-image[common]'
 
 Install all tile sources on Linux:
 
-    pip install large-image[all] --find-links https://girder.github.io/large_image_wheels
+    pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
 
 ### Conda
 
@@ -225,7 +225,7 @@ server.
 ### Installation
 
 ``` bash
-pip install large-image-server[all]
+pip install 'large-image-server[all]'
 ```
 
 ### Running
@@ -327,18 +327,51 @@ tilesource:
 
 Setting up a development environment:
 
-    # Clone the repository
-    git clone https://github.com/girder/large_image.git
-    cd large_image
+    # Clone the repository (the directory is `pelican` in this workspace,
+    # historically `large_image` upstream)
+    cd pelican
 
-    # Create virtual environment
-    python -m venv .venv
+    # Create virtual environment (python3 on macOS)
+    python3 -m venv .venv
     source .venv/bin/activate
 
-    # Install in development mode
-    pip install -e .[common]
-    pip install -e utilities/server[all]
-    pip install -e utilities/converter[all]
+    # Install the core library in editable mode.
+    # NOTE: always single-quote extras specifiers — zsh (the default on
+    # macOS) treats unquoted `[common]` as a glob character class and
+    # errors out with "zsh: no matches found".
+    pip install -e '.[common]'
+
+    # Install the FastAPI tile server (editable). Do NOT use `[all]` —
+    # it transitively installs python-javabridge, which fails to build
+    # unless a full JDK is on PATH with JAVA_HOME set. The extras below
+    # cover every runtime feature used by the Starling orchestrator
+    # (common tile sources + JWT auth + Postgres case routing):
+    pip install -e 'utilities/server[common,jwt,db]'
+
+    # (Optional) Converter utility — only needed for offline pyramid
+    # generation, not for running the live tile server.
+    pip install -e 'utilities/converter[all]'
+
+> **If you really need `[all]`** (for bioformats / javabridge support),
+> install a full JDK first and export `JAVA_HOME`:
+> ```bash
+> export JAVA_HOME=$(/usr/libexec/java_home)   # macOS
+> pip install -e 'utilities/server[all]'
+> ```
+> Without `JAVA_HOME`, pip fails with `Exception: JVM not found` while
+> trying to build `python-javabridge`.
+
+> **Note on the console script.** `pip install -e utilities/server[…]`
+> installs a `large_image_server` entry point into `.venv/bin/`. Make
+> sure your venv is activated before invoking it, or call it by absolute
+> path: `./.venv/bin/large_image_server --help`. If a previous global
+> `pip install` left a stale copy at `/opt/homebrew/bin/large_image_server`
+> (Homebrew Python) or `/usr/local/bin/large_image_server`, it will
+> shadow the venv script on PATH. Remove the stale copy with:
+> ```bash
+> /opt/homebrew/opt/python@3.11/bin/python3.11 -m pip uninstall -y large-image-server
+> ```
+> (substitute your prior Python version as appropriate).
 
 Running tests:
 
@@ -347,7 +380,7 @@ Running tests:
 
     # Server tests
     cd utilities/server
-    pip install -e .[test]
+    pip install -e '.[test]'
     pytest tests/
 
     # Digital viewer tests

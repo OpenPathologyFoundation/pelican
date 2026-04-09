@@ -203,7 +203,7 @@
     <div class="waiting-overlay">
       <div class="waiting-spinner"></div>
       <p class="waiting-text">Waiting for workstation...</p>
-      <p class="waiting-hint">This window was opened by the Okapi workstation.</p>
+      <p class="waiting-hint">This window was opened by the Starling workstation.</p>
     </div>
   {:else if bridgeState === 'ended'}
     <!-- Orchestrator sent logout -->
