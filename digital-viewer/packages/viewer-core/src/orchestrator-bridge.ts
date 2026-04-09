@@ -2,7 +2,7 @@
  * Orchestrator Bridge — Viewer Side
  *
  * Manages the communication channel from the viewer window
- * back to the Okapi orchestrator via postMessage.
+ * back to the Starling orchestrator via postMessage.
  *
  * Responsibilities:
  * - Listen for orchestrator messages with origin validation

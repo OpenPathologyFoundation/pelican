@@ -249,7 +249,7 @@ $: magnification = $slideMetadata?.magnification;
 
 ## Orchestrator Bridge
 
-The viewer-core package includes the `OrchestratorBridge` class for receiving commands from the Okapi orchestrator over `postMessage`. This is used in **orchestrated mode** when the viewer is launched as a child window by the Okapi web-client.
+The viewer-core package includes the `OrchestratorBridge` class for receiving commands from the Starling orchestrator over `postMessage`. This is used in **orchestrated mode** when the viewer is launched as a child window by the Starling web-client.
 
 ```typescript
 import { OrchestratorBridge, type BridgeState } from '@pathology/viewer-core';

@@ -4,11 +4,11 @@
  * Defines the contract for saving and loading annotations from different
  * storage backends. The viewer uses this abstraction so that the same
  * annotation UI can work in standalone mode (localStorage) and in
- * orchestrated mode (proxied through the orchestrator to Okapi backend).
+ * orchestrated mode (proxied through the orchestrator to Starling backend).
  *
  * Implementations:
  * - LocalAnnotationProvider   — localStorage (standalone / offline)
- * - OrchestratorAnnotationProvider — postMessage → orchestrator → Okapi API (future)
+ * - OrchestratorAnnotationProvider — postMessage → orchestrator → Starling API (future)
  */
 
 import type { AnnotationProperties, Annotation, AnnotationLayer } from './types';
@@ -60,7 +60,7 @@ export interface AnnotationPersistenceProvider {
 
 // ─── Local Storage Provider ──────────────────────────────────────────
 
-const STORAGE_KEY_PREFIX = 'okapi:annotations:';
+const STORAGE_KEY_PREFIX = 'starling:annotations:';
 
 /**
  * LocalAnnotationProvider — stores annotations in localStorage.
@@ -181,7 +181,7 @@ export class LocalAnnotationProvider implements AnnotationPersistenceProvider {
  * OrchestratorAnnotationProvider — proxies through the orchestrator postMessage bridge.
  *
  * In orchestrated mode, annotations are sent to the orchestrator window via
- * postMessage, which proxies them to the Okapi backend API:
+ * postMessage, which proxies them to the Starling backend API:
  *   POST   /api/cases/{accession}/annotations
  *   GET    /api/cases/{accession}/annotations
  *   PUT    /api/cases/{accession}/annotations/{id}

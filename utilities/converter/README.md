@@ -19,7 +19,7 @@ access.
 
 To install via pip with custom-built wheels:
 
-`pip install large-image-converter[sources] --find-links https://girder.github.io/large_image_wheels`
+`pip install 'large-image-converter[sources]' --find-links https://girder.github.io/large_image_wheels`
 
 The `[sources]` extra requirement is optional. When specified, all of
 the default large-image tile sources are installed for additional

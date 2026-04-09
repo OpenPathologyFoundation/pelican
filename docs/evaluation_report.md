@@ -220,7 +220,7 @@ To create a pathology tile server with OpenSeaDragon:
 **Installation:**
 
 ``` bash
-pip install large-image[openslide,tiff,common]
+pip install 'large-image[openslide,tiff,common]'
 ```
 
 **Simple HTTP Tile Server:**

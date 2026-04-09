@@ -86,3 +86,6 @@ monkeytype.sqlite3
 # Build/test artifacts directory
 /artifacts/
 CHANGELOG-WIP.md
+
+# Local dev notes (per-iteration PR drafts, scratch)
+.dev-notes/

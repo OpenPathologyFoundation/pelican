@@ -455,7 +455,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY . .
-RUN pip install -e .[openslide,tiff,common]
+RUN pip install -e '.[openslide,tiff,common]'
 
 EXPOSE 8000
 CMD ["large_image_server", "--host", "0.0.0.0", "--port", "8000"]

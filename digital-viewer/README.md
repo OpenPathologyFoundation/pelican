@@ -95,7 +95,7 @@ cd /path/to/large_image
 source .venv/bin/activate
 
 # Install the tile server (if not already installed)
-pip install -e ./utilities/server[all]
+pip install -e './utilities/server[common,jwt,db]'
 
 # Start the tile server
 large_image_server --image-dir /path/to/your/slides --port 8000
@@ -276,20 +276,20 @@ npm run dev
 
 ---
 
-## Orchestrated Mode (with Okapi)
+## Orchestrated Mode (with Starling)
 
 The viewer can run in two modes:
 
-1. **Standalone mode** — opened directly at `http://localhost:5173` with the demo entry point (`index.html`). Used for viewer development and testing without the Okapi backend.
-2. **Orchestrated mode** — launched as a child window by the Okapi web-client via the `orchestrated.html` entry point. This is the production deployment mode for clinical use.
+1. **Standalone mode** — opened directly at `http://localhost:5173` with the demo entry point (`index.html`). Used for viewer development and testing without the Starling backend.
+2. **Orchestrated mode** — launched as a child window by the Starling web-client via the `orchestrated.html` entry point. This is the production deployment mode for clinical use.
 
 ### How Orchestrated Mode Works
 
-In orchestrated mode, the viewer is launched by the Okapi orchestrator (web-client) via `window.open('/viewer/orchestrated.html')`. The two windows communicate through a typed `postMessage` bridge:
+In orchestrated mode, the viewer is launched by the Starling orchestrator (web-client) via `window.open('/viewer/orchestrated.html')`. The two windows communicate through a typed `postMessage` bridge:
 
 ```
 ┌─────────────────┐          postMessage          ┌─────────────────┐
-│  Okapi Web       │  ──────────────────────────>  │  Digital Viewer  │
+│  Starling Web    │  ──────────────────────────>  │  Digital Viewer  │
 │  Client          │  orchestrator:init            │                  │
 │  (orchestrator)  │  orchestrator:token-refresh   │  orchestrated/   │
 │                  │  orchestrator:case-change      │  App.svelte      │
@@ -341,7 +341,7 @@ When the orchestrator disconnects or ends, the viewer shows appropriate overlays
 
 ### Running in Orchestrated Mode
 
-To run the full two-window system locally, you need all 5 services behind the nginx reverse proxy. From the **Okapi** repository:
+To run the full two-window system locally, you need all 5 services behind the nginx reverse proxy. From the **Starling** repository:
 
 ```bash
 # 1. Start infrastructure (Keycloak + Postgres)
@@ -362,13 +362,13 @@ cd /path/to/large_image/digital-viewer
 VITE_BASE=/viewer/ npm run dev -- --port 5174 --host &
 
 # 5. Start web-client (:5173)
-cd /path/to/Okapi/web-client
+cd /path/to/starling/web-client
 npm run dev -- --host &
 
 # 6. Start reverse proxy (:8443)
 docker run --rm -p 8443:8443 \
   --add-host=host.docker.internal:host-gateway \
-  -v /path/to/Okapi/proxy/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /path/to/starling/proxy/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro \
   nginx:alpine
 ```
 

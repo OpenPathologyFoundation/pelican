@@ -1,7 +1,7 @@
 /**
  * Orchestrated Viewer Entry Point
  *
- * Launched by the Okapi orchestrator via window.open().
+ * Launched by the Starling orchestrator via window.open().
  * Communicates with the orchestrator via postMessage bridge.
  */
 
