@@ -89,8 +89,8 @@ other systems.
 # Core library with common image format support
 pip install 'large-image[common]'
 
-# With tile server
-pip install 'large-image[common]' large-image-server
+# With tile server from this repository
+pip install './utilities/server[common]'
 
 # All formats (Linux only, requires additional system libraries)
 pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
@@ -142,6 +142,10 @@ Install with common tile sources (works on Linux, macOS, Windows):
 
     pip install 'large-image[common]'
 
+Install the FastAPI tile server from this repository checkout:
+
+    pip install './utilities/server[common]'
+
 Install all tile sources on Linux:
 
     pip install 'large-image[all]' --find-links https://girder.github.io/large_image_wheels
@@ -186,8 +190,9 @@ Large Image consists of several Python packages:
 **Utilities**
 
 - `large-image-server`: FastAPI tile server for serving images over
-  HTTP/REST. Supports XYZ tiles, DeepZoom (OpenSeaDragon), metadata
-  endpoints, and region extraction.
+  HTTP/REST. In this fork it is packaged from `utilities/server/`
+  rather than published as a separate PyPI package. Supports XYZ tiles,
+  DeepZoom (OpenSeaDragon), metadata endpoints, and region extraction.
 - `large-image-converter`: Convert images to pyramidal TIFF format.
   Extra options: `jp2k` for JPEG2000, `geospatial` for GeoTIFF support,
   `all` for everything.
@@ -219,13 +224,18 @@ formats:
 
 ## Tile Server
 
-The `large-image-server` package provides a standalone FastAPI tile
-server.
+The standalone FastAPI tile server lives in `utilities/server/`. It is
+installable from this repository checkout as the `large-image-server`
+package.
 
 ### Installation
 
 ``` bash
-pip install 'large-image-server[all]'
+# From the repository root
+pip install './utilities/server[common]'
+
+# Or editable for local development
+pip install -e 'utilities/server[common]'
 ```
 
 ### Running
