@@ -23,13 +23,14 @@ including pathology whole slide images (WSI).
 ## Installation
 
 ``` bash
-pip install large-image-server
+# From the repository root
+pip install './utilities/server'
 
 # With common image format support
-pip install 'large-image-server[common]'
+pip install './utilities/server[common]'
 
 # With all format sources
-pip install 'large-image-server[all]'
+pip install './utilities/server[all]'
 ```
 
 ## Quick Start
