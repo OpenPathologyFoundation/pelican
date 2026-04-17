@@ -55,6 +55,12 @@ export interface IncomingMessage {
 
 /** Registration payload */
 export interface RegisterPayload {
+  /**
+   * Signed bearer token minted by the orchestrator (`/auth/token`).
+   * The JWT `sub` claim is treated as the authoritative user identity when
+   * JWT verification is enabled; any `userId` sent here is ignored in that case.
+   */
+  token?: string;
   userId: string;
   caseId: string;
   patientIdentifier: string;
@@ -96,6 +102,18 @@ export interface ServerConfig {
   heartbeatTimeout: number; // ms before considering a window stale
   cleanupInterval: number; // ms between cleanup runs
   maxConnectionsPerUser: number;
+  /**
+   * When true, every `register` message must carry a valid JWT. The JWT `sub`
+   * claim becomes the authoritative `userId` — any client-supplied `userId`
+   * is ignored. When false, any userId is trusted (dev-only; logs a warning).
+   */
+  jwtEnabled: boolean;
+  /** HMAC-SHA256 shared secret. Must match the orchestrator's `starling.jwt.secret`. */
+  jwtSecret?: string;
+  /** Expected `aud` claim (default: `starling-tile-server`). */
+  jwtAudience?: string;
+  /** Expected `iss` claim (default: `starling`). */
+  jwtIssuer?: string;
 }
 
 /** Default server configuration */
@@ -105,4 +123,7 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   heartbeatTimeout: 60000, // 1 minute
   cleanupInterval: 30000, // 30 seconds
   maxConnectionsPerUser: 10,
+  jwtEnabled: false,
+  jwtAudience: 'starling-tile-server',
+  jwtIssuer: 'starling',
 };

@@ -392,10 +392,12 @@
     if (!sessionServiceUrl || !userId) return;
 
     try {
-      // Configure session handler
+      // Configure session handler — pass the JWT so the session-service can
+      // verify the caller's identity instead of trusting the client-supplied userId.
       const handler = createWebSocketSessionHandler({
         url: sessionServiceUrl,
         userId,
+        token: accessToken ?? undefined,
         heartbeatInterval: 30000, // 30s per SYS-SES-002
         onWarning: (warning) => {
           onsessionwarning?.({ warning });
