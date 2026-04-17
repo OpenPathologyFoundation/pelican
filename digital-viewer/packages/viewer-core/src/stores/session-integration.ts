@@ -253,6 +253,11 @@ export interface WebSocketSessionConfig {
   url: string;
   /** User ID */
   userId: string;
+  /**
+   * Bearer token for session-service authentication.
+   * Required when the session-service runs with JWT enabled.
+   */
+  token?: string;
   /** Heartbeat interval in ms (default: 30000 per SYS-SES-002) */
   heartbeatInterval?: number;
   /** On warning callback */
@@ -340,6 +345,7 @@ export function createWebSocketSessionHandler(
     register(caseId: string, patientName: string): void {
       caseContext = { caseId, patientName };
       sendMessage('register', {
+        token: config.token,
         userId: config.userId,
         caseId,
         patientIdentifier: patientName,

@@ -42,12 +42,21 @@ export interface FDPConfig {
   sessionServiceUrl?: string;
   /** User ID for session registration (Layer 2, optional) */
   userId?: string;
+  /**
+   * Bearer token for session-service authentication (Layer 2).
+   * When the session-service has JWT enabled, this must be a current
+   * starling-auth token; the service uses the `sub` claim as the
+   * authoritative user identity and ignores `userId`.
+   */
+  token?: string;
   /** Heartbeat interval in milliseconds (default: 30000) */
   heartbeatInterval: number;
 }
 
 /** Session registration payload for Layer 2 */
 export interface SessionRegistration {
+  /** Bearer token — required when session-service has JWT enabled. */
+  token?: string;
   userId: string;
   caseId: string;
   patientIdentifier: string;

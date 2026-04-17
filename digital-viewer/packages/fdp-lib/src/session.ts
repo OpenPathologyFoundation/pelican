@@ -126,6 +126,7 @@ export class SessionClient {
     }
 
     const registration: SessionRegistration = {
+      token: this.config.token,
       userId: this.config.userId,
       caseId: caseContext.caseId,
       patientIdentifier: caseContext.patientName,

@@ -7,6 +7,11 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { SessionStore } from './session-store';
 import { SessionManager } from './session-manager';
+import {
+  createJwtVerifier,
+  JwtVerificationError,
+  type JwtVerifier,
+} from './jwt-verifier';
 import type {
   DeregisterPayload,
   FocusPayload,
@@ -36,16 +41,38 @@ export class SessionAwarenessServer {
   private store: SessionStore;
   private manager: SessionManager;
   private config: ServerConfig;
+  private verifyToken: JwtVerifier | null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   // Connection map: connectionId -> WebSocket
   private connections: Map<string, ExtendedWebSocket> = new Map();
 
-  constructor(config: ServerConfig) {
+  constructor(config: ServerConfig, verifier?: JwtVerifier) {
     this.config = config;
     this.store = new SessionStore();
     this.manager = new SessionManager(this.store, config);
+
+    if (verifier) {
+      this.verifyToken = verifier;
+    } else if (config.jwtEnabled) {
+      if (!config.jwtSecret) {
+        throw new Error(
+          'jwtEnabled is true but jwtSecret is missing — refusing to start in an insecure configuration'
+        );
+      }
+      this.verifyToken = createJwtVerifier({
+        secret: config.jwtSecret,
+        audience: config.jwtAudience,
+        issuer: config.jwtIssuer,
+      });
+    } else {
+      this.verifyToken = null;
+      console.warn(
+        '[SessionService] JWT verification DISABLED — any client can claim any userId. ' +
+          'Set STARLING_JWT_SECRET and jwtEnabled=true for any non-local deployment.'
+      );
+    }
   }
 
   /** Start the server */
@@ -126,7 +153,7 @@ export class SessionAwarenessServer {
 
     switch (message.type) {
       case 'register':
-        this.handleRegister(ws, message.payload as RegisterPayload);
+        void this.handleRegister(ws, message.payload as RegisterPayload);
         break;
 
       case 'deregister':
@@ -150,10 +177,38 @@ export class SessionAwarenessServer {
   }
 
   /** Handle register message */
-  private handleRegister(ws: ExtendedWebSocket, payload: RegisterPayload): void {
-    ws.userId = payload.userId;
+  private async handleRegister(
+    ws: ExtendedWebSocket,
+    payload: RegisterPayload
+  ): Promise<void> {
+    let authoritativeUserId = payload.userId;
 
-    const result = this.manager.register(ws.connectionId, payload);
+    if (this.verifyToken) {
+      try {
+        const identity = await this.verifyToken(payload.token);
+        authoritativeUserId = identity.userId;
+      } catch (err) {
+        const reason = err instanceof JwtVerificationError ? err.reason : 'invalid';
+        console.warn(
+          `[SessionService] Rejected register from ${ws.connectionId}: ${reason}`
+        );
+        this.send(ws, {
+          type: 'error',
+          payload: { message: 'authentication failed', reason },
+        });
+        ws.close(1008, 'authentication failed');
+        return;
+      }
+    }
+
+    const authenticatedPayload: RegisterPayload = {
+      ...payload,
+      userId: authoritativeUserId,
+    };
+
+    ws.userId = authoritativeUserId;
+
+    const result = this.manager.register(ws.connectionId, authenticatedPayload);
 
     // Send acknowledgment
     this.send(ws, {
@@ -172,7 +227,7 @@ export class SessionAwarenessServer {
     }
 
     // Send initial sync of user's state
-    const userState = this.manager.getUserState(payload.userId);
+    const userState = this.manager.getUserState(authoritativeUserId);
     if (userState.length > 1) {
       this.send(ws, {
         type: 'sync',
@@ -188,7 +243,7 @@ export class SessionAwarenessServer {
     }
 
     console.log(
-      `[SessionService] Registered: user=${payload.userId}, window=${payload.windowId}, case=${payload.caseId}`
+      `[SessionService] Registered: user=${authoritativeUserId}, window=${payload.windowId}, case=${payload.caseId}`
     );
   }
 
@@ -197,6 +252,14 @@ export class SessionAwarenessServer {
     ws: ExtendedWebSocket,
     payload: DeregisterPayload
   ): void {
+    if (!ws.userId) {
+      this.send(ws, {
+        type: 'error',
+        payload: { message: 'Not registered' },
+      });
+      return;
+    }
+
     const result = this.manager.deregister(payload.windowId, ws.userId);
 
     // Send acknowledgment
@@ -227,6 +290,14 @@ export class SessionAwarenessServer {
     ws: ExtendedWebSocket,
     payload: HeartbeatPayload
   ): void {
+    if (!ws.userId) {
+      this.send(ws, {
+        type: 'error',
+        payload: { message: 'Not registered' },
+      });
+      return;
+    }
+
     const updated = this.manager.updateHeartbeat(payload.windowId, ws.userId);
 
     this.send(ws, {
@@ -349,6 +420,18 @@ export class SessionAwarenessServer {
       registrations: managerStats.totalRegistrations,
       users: managerStats.activeUsers,
     };
+  }
+
+  /**
+   * Address info the server is bound to, or null if not started.
+   * Useful for tests that pass `port: 0` to bind on a random free port.
+   */
+  address(): { host: string; port: number } | null {
+    const info = this.wss?.address();
+    if (info && typeof info === 'object') {
+      return { host: info.address, port: info.port };
+    }
+    return null;
   }
 
   /** Stop the server */
