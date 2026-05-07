@@ -13,6 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS?.split(',').map((s) => s.trim()),
     proxy: {
       // Proxy tile server requests to avoid CORS issues in development
       '/api': {
